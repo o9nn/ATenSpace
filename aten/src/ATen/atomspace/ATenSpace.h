@@ -11,16 +11,24 @@
  * - Node: Represents entities/concepts, can have tensor embeddings
  * - Link: Represents relationships between atoms (hypergraph edges)
  * - AtomSpace: Container managing the hypergraph database
+ * - TimeServer: Manages temporal information for atoms
+ * - AttentionBank: Manages attention values and cognitive focus
  * 
  * Features:
  * - Tensor-based truth values and embeddings
  * - Similarity-based queries using tensor operations
  * - Thread-safe atom management
  * - Immutable atoms with unique identity
+ * - Temporal reasoning and time-stamped atoms
+ * - Attention allocation mechanisms
+ * - Persistent storage via serialization
  */
 
 #include <ATen/atomspace/Atom.h>
 #include <ATen/atomspace/AtomSpace.h>
+#include <ATen/atomspace/TimeServer.h>
+#include <ATen/atomspace/AttentionBank.h>
+#include <ATen/atomspace/Serializer.h>
 
 namespace at {
 namespace atomspace {
@@ -51,6 +59,13 @@ inline Atom::Handle createPredicateNode(
     return space.addNode(Atom::Type::PREDICATE_NODE, name);
 }
 
+// Create a variable node (for pattern matching)
+inline Atom::Handle createVariableNode(
+    AtomSpace& space, 
+    const std::string& name) {
+    return space.addNode(Atom::Type::VARIABLE_NODE, name);
+}
+
 // Create an inheritance link: A inherits from B
 inline Atom::Handle createInheritanceLink(
     AtomSpace& space,
@@ -75,6 +90,82 @@ inline Atom::Handle createListLink(
     AtomSpace& space,
     const std::vector<Atom::Handle>& atoms) {
     return space.addLink(Atom::Type::LIST_LINK, atoms);
+}
+
+// Create an AND link (logical conjunction)
+inline Atom::Handle createAndLink(
+    AtomSpace& space,
+    const std::vector<Atom::Handle>& atoms) {
+    return space.addLink(Atom::Type::AND_LINK, atoms);
+}
+
+// Create an OR link (logical disjunction)
+inline Atom::Handle createOrLink(
+    AtomSpace& space,
+    const std::vector<Atom::Handle>& atoms) {
+    return space.addLink(Atom::Type::OR_LINK, atoms);
+}
+
+// Create a NOT link (logical negation)
+inline Atom::Handle createNotLink(
+    AtomSpace& space,
+    Atom::Handle atom) {
+    return space.addLink(Atom::Type::NOT_LINK, {atom});
+}
+
+// Create a member link: element is member of set
+inline Atom::Handle createMemberLink(
+    AtomSpace& space,
+    Atom::Handle element,
+    Atom::Handle set) {
+    return space.addLink(Atom::Type::MEMBER_LINK, {element, set});
+}
+
+// Create a subset link: subset is subset of superset
+inline Atom::Handle createSubsetLink(
+    AtomSpace& space,
+    Atom::Handle subset,
+    Atom::Handle superset) {
+    return space.addLink(Atom::Type::SUBSET_LINK, {subset, superset});
+}
+
+// Create a context link: atom in context
+inline Atom::Handle createContextLink(
+    AtomSpace& space,
+    Atom::Handle context,
+    Atom::Handle atom) {
+    return space.addLink(Atom::Type::CONTEXT_LINK, {context, atom});
+}
+
+// Create a sequential link: atoms in temporal sequence
+inline Atom::Handle createSequentialLink(
+    AtomSpace& space,
+    const std::vector<Atom::Handle>& atoms) {
+    return space.addLink(Atom::Type::SEQUENTIAL_LINK, atoms);
+}
+
+// Create a simultaneous link: atoms occurring simultaneously
+inline Atom::Handle createSimultaneousLink(
+    AtomSpace& space,
+    const std::vector<Atom::Handle>& atoms) {
+    return space.addLink(Atom::Type::SIMULTANEOUS_LINK, atoms);
+}
+
+// Create a similarity link: atom1 is similar to atom2
+inline Atom::Handle createSimilarityLink(
+    AtomSpace& space,
+    Atom::Handle atom1,
+    Atom::Handle atom2) {
+    return space.addLink(Atom::Type::SIMILARITY_LINK, {atom1, atom2});
+}
+
+// Create an execution link: execute procedure with arguments
+inline Atom::Handle createExecutionLink(
+    AtomSpace& space,
+    Atom::Handle procedure,
+    const std::vector<Atom::Handle>& args) {
+    auto listLink = space.addLink(Atom::Type::LIST_LINK, args);
+    return space.addLink(Atom::Type::EXECUTION_LINK, {procedure, listLink});
 }
 
 } // namespace atomspace

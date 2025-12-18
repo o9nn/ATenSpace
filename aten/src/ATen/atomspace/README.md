@@ -23,14 +23,14 @@ The base class for all knowledge units. Atoms are:
 Represents entities or concepts. Features:
 - Named entities (e.g., "cat", "mammal")
 - Optional tensor embeddings for semantic representation
-- Support for different node types (ConceptNode, PredicateNode, etc.)
+- Support for different node types (ConceptNode, PredicateNode, VariableNode)
 
 ### Link
 Represents relationships between atoms. Features:
 - Connects any number of atoms (not just pairs)
 - Can connect nodes and other links (forming a hypergraph)
 - Maintains ordered outgoing sets
-- Support for various link types (InheritanceLink, EvaluationLink, etc.)
+- Support for various link types (InheritanceLink, EvaluationLink, logical links, etc.)
 
 ### AtomSpace
 The container managing the hypergraph. Features:
@@ -38,6 +38,28 @@ The container managing the hypergraph. Features:
 - Efficient indexing for fast lookup
 - Similarity-based queries using tensor embeddings
 - Incoming set tracking (what links reference each atom)
+
+### TimeServer
+Manages temporal information for atoms. Features:
+- Tracks creation, access, and modification times
+- Records custom events with timestamps
+- Supports time-range queries
+- Essential for episodic memory and temporal reasoning
+
+### AttentionBank
+Manages attention values and cognitive focus. Features:
+- Short-Term Importance (STI) for current salience
+- Long-Term Importance (LTI) for historical significance
+- Very Long-Term Importance (VLTI) for archival value
+- Attentional focus mechanism (top-K atoms)
+- Attention dynamics (stimulation, decay, transfer)
+
+### Serializer
+Provides persistence support. Features:
+- Save/load AtomSpace to/from files
+- Text-based format for readability
+- Preserves truth values and attention values
+- Export to string representation
 
 ## Usage Example
 
@@ -154,20 +176,106 @@ Handle getOutgoingAtom(size_t index) const;
 const std::vector<WeakHandle>& getIncomingSet() const;
 ```
 
+### TimeServer Operations
+
+```cpp
+// Record temporal events
+void recordCreation(Handle atom);
+void recordAccess(Handle atom);
+void recordModification(Handle atom);
+void recordEvent(Handle atom, const std::string& eventDescription);
+
+// Query temporal information
+TemporalInfo getTemporalInfo(Handle atom) const;
+TimePoint getCreationTime(Handle atom) const;
+TimePoint getLastAccessTime(Handle atom) const;
+TimePoint getLastModifiedTime(Handle atom) const;
+std::vector<std::pair<TimePoint, std::string>> getEventHistory(Handle atom) const;
+
+// Time-range queries
+std::vector<Handle> getAtomsCreatedBetween(TimePoint start, TimePoint end) const;
+std::vector<Handle> getAtomsAccessedBetween(TimePoint start, TimePoint end) const;
+std::vector<Handle> getAtomsModifiedBetween(TimePoint start, TimePoint end) const;
+```
+
+### AttentionBank Operations
+
+```cpp
+// Set and get attention values
+void setAttentionValue(Handle atom, const AttentionValue& av);
+AttentionValue getAttentionValue(Handle atom) const;
+
+// Update specific importance values
+void updateSTI(Handle atom, float sti);
+void updateLTI(Handle atom, float lti);
+void updateVLTI(Handle atom, float vlti);
+
+// Attention dynamics
+void stimulate(Handle atom, float amount);
+void decaySTI(float factor = 0.9f);
+void transferSTI(Handle from, Handle to, float amount);
+
+// Query by importance
+std::vector<Handle> getAttentionalFocus() const;
+std::vector<Handle> getAtomsAboveSTI(float threshold) const;
+std::vector<std::pair<Handle, float>> getTopSTI(size_t n) const;
+std::vector<std::pair<Handle, float>> getTopLTI(size_t n) const;
+
+// Configuration
+void setMaxAFSize(size_t size);
+void setMinSTIThreshold(float threshold);
+```
+
+### Serialization Operations
+
+```cpp
+// Save and load AtomSpace
+static bool save(const AtomSpace& space, const std::string& filename);
+static bool load(AtomSpace& space, const std::string& filename);
+
+// Export to string
+static std::string toString(const AtomSpace& space);
+```
+
 ## Atom Types
 
 ### Node Types
 - `NODE` - Generic node
 - `CONCEPT_NODE` - Represents a concept or entity
 - `PREDICATE_NODE` - Represents a predicate/relation name
+- `VARIABLE_NODE` - Represents a variable (for pattern matching)
 
 ### Link Types
+
+#### Basic Links
 - `LINK` - Generic link
 - `INHERITANCE_LINK` - Represents inheritance (is-a) relationships
 - `EVALUATION_LINK` - Represents predicate evaluation
 - `LIST_LINK` - Ordered list of atoms
 - `ORDERED_LINK` - Generic ordered link
 - `UNORDERED_LINK` - Generic unordered link
+
+#### Logical Links
+- `AND_LINK` - Logical conjunction
+- `OR_LINK` - Logical disjunction
+- `NOT_LINK` - Logical negation
+
+#### Set Links
+- `MEMBER_LINK` - Element membership in a set
+- `SUBSET_LINK` - Subset relationship
+
+#### Contextual Links
+- `CONTEXT_LINK` - Contextual relationships
+
+#### Temporal Links
+- `SEQUENTIAL_LINK` - Temporal sequence
+- `SIMULTANEOUS_LINK` - Simultaneous occurrence
+
+#### Similarity Links
+- `SIMILARITY_LINK` - Similarity relationship
+
+#### Execution Links
+- `EXECUTION_LINK` - Procedure execution
 
 ## Design Principles
 
@@ -188,7 +296,7 @@ const std::vector<WeakHandle>& getIncomingSet() const;
 | Similarity Search | Pattern Matching | Tensor Operations |
 | Language | C++ (with Scheme) | C++ (with ATen) |
 
-## Building the Example
+## Building and Running
 
 ```bash
 # Navigate to the ATen directory
@@ -199,17 +307,26 @@ mkdir -p build && cd build
 cmake ..
 make
 
-# Run the example
+# Run the basic example
 ./atomspace_example
+
+# Run the advanced features example
+./atomspace_example_advanced
+
+# Run the basic tests
+./atomspace_test
+
+# Run the advanced features tests
+./atomspace_test_advanced
 ```
 
 ## Future Enhancements
 
 Potential areas for expansion:
-- Pattern matching and unification
+- Pattern matching and unification ✅ VariableNode added
 - Backward chaining inference
 - Distributed atomspace support
-- Persistent storage (serialization)
+- ~~Persistent storage (serialization)~~ ✅ Implemented
 - Python bindings
 - GPU-accelerated operations
 - Advanced query languages
