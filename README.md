@@ -17,6 +17,10 @@ ATenSpace bridges symbolic AI and neural AI by combining:
 - 🔗 **Hypergraph Structure**: Represent complex relationships beyond simple graphs
 - 🔒 **Thread-Safe**: Concurrent access to the knowledge base
 - 🎯 **Type-Safe**: Strong typing for atoms and links
+- ⏰ **Temporal Reasoning**: TimeServer for tracking temporal information
+- 🎯 **Attention Mechanisms**: AttentionBank for cognitive focus management
+- 💾 **Persistence**: Serialization support for saving/loading knowledge graphs
+- 🔗 **Rich Link Types**: Logical, temporal, contextual, and set-based relationships
 
 ## Quick Start
 
@@ -50,6 +54,9 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace:
   - **Nodes** - Represent entities/concepts (can have tensor embeddings)
   - **Links** - Represent relationships (hypergraph edges)
 - **AtomSpace** - Container managing the hypergraph database
+- **TimeServer** - Tracks temporal information and events
+- **AttentionBank** - Manages attention values and cognitive focus
+- **Serializer** - Provides persistence (save/load)
 - **Truth Values** - Tensor-based probabilistic values
 - **Incoming Sets** - Track what links reference each atom
 
