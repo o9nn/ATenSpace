@@ -1,3 +1,8 @@
+---
+name: "ATenSpace"
+description: "ATenSpace tensor-based hypergraph knowledge representation system."
+---
+
 # ATenSpace Framework Agent
 
 ## Identity
