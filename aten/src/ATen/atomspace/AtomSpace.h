@@ -129,6 +129,18 @@ public:
             return false; // Cannot remove atom that is referenced
         }
         
+        // If this is a link, remove references from outgoing atoms' incoming sets
+        if (atom->isLink()) {
+            auto linkPtr = std::dynamic_pointer_cast<Link>(atom);
+            if (linkPtr) {
+                for (const auto& outgoingAtom : linkPtr->getOutgoingSet()) {
+                    // Note: We can't directly modify incoming sets from here
+                    // since they use weak_ptr. The weak_ptrs will naturally
+                    // become invalid when the atom is destroyed.
+                }
+            }
+        }
+        
         if (atom->isNode()) {
             auto nodePtr = std::dynamic_pointer_cast<Node>(atom);
             if (nodePtr) {
@@ -202,24 +214,40 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         std::vector<std::pair<Handle, float>> results;
         
-        // Compute similarities for all nodes with embeddings
+        // Collect all nodes with embeddings
+        std::vector<Handle> embeddingNodes;
+        std::vector<Tensor> embeddings;
+        
         for (const auto& atom : atoms_) {
             if (atom->isNode()) {
                 auto nodePtr = std::dynamic_pointer_cast<Node>(atom);
                 if (nodePtr && nodePtr->hasEmbedding()) {
-                    Tensor embedding = nodePtr->getEmbedding();
-                    
-                    // Compute cosine similarity
-                    float similarity = torch::cosine_similarity(
-                        query.unsqueeze(0), 
-                        embedding.unsqueeze(0), 
-                        /*dim=*/1
-                    ).item<float>();
-                    
-                    if (similarity >= threshold) {
-                        results.push_back({atom, similarity});
-                    }
+                    embeddingNodes.push_back(atom);
+                    embeddings.push_back(nodePtr->getEmbedding());
                 }
+            }
+        }
+        
+        if (embeddings.empty()) {
+            return results;
+        }
+        
+        // Batch compute similarities for efficiency
+        Tensor embeddingStack = torch::stack(embeddings);
+        Tensor queryExpanded = query.unsqueeze(0);
+        
+        // Compute cosine similarity for all embeddings at once
+        Tensor similarities = torch::cosine_similarity(
+            queryExpanded.expand({embeddingStack.size(0), -1}),
+            embeddingStack,
+            /*dim=*/1
+        );
+        
+        // Collect results above threshold
+        for (size_t i = 0; i < embeddingNodes.size(); ++i) {
+            float similarity = similarities[i].item<float>();
+            if (similarity >= threshold) {
+                results.push_back({embeddingNodes[i], similarity});
             }
         }
         

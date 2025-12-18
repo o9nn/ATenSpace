@@ -10,7 +10,6 @@ namespace at {
 namespace atomspace {
 
 // Forward declarations
-class TruthValue;
 class AtomSpace;
 
 /**
