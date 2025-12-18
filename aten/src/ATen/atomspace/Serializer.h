@@ -16,6 +16,14 @@ namespace atomspace {
  * Provides persistence support for AtomSpace, allowing knowledge graphs
  * to be saved to disk and loaded back. Uses a simple text-based format
  * for readability and portability.
+ * 
+ * Limitations:
+ * - Embeddings are not serialized (too large for text format)
+ * - Links referencing other links use hash references which are not
+ *   fully restored during deserialization. For best results, ensure
+ *   all referenced atoms are nodes.
+ * - For production use, consider implementing binary serialization
+ *   with full graph structure preservation.
  */
 class Serializer {
 public:
