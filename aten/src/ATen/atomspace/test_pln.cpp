@@ -95,9 +95,9 @@ void testTruthValueFormulas() {
     assert(revisedStrength > 0.7f && revisedStrength < 0.8f); // Weighted average
     
     // Test 7: Abduction
-    auto tvB = TruthValue::create(0.9f, 0.8f);
+    auto tvObserved = TruthValue::create(0.9f, 0.8f);
     auto tvAB = TruthValue::create(0.85f, 0.9f);
-    auto tvAbduced = TruthValue::abduction(tvB, tvAB);
+    auto tvAbduced = TruthValue::abduction(tvObserved, tvAB);
     assert(TruthValue::getStrength(tvAbduced) > 0.5f);
     assert(TruthValue::getConfidence(tvAbduced) < TruthValue::getConfidence(tvAB));
     

@@ -304,10 +304,10 @@ private:
                 const auto& allAtoms = space_.getAllAtoms();
                 for (const auto& B : allAtoms) {
                     // Look for A→B
-                    auto AB = space.getLink(goal->getType(), {A, B});
+                    auto AB = space_.getLink(goal->getType(), {A, B});
                     if (AB) {
                         // Look for B→C
-                        auto BC = space.getLink(goal->getType(), {B, C});
+                        auto BC = space_.getLink(goal->getType(), {B, C});
                         if (BC) {
                             results.push_back({AB, BC});
                         }

@@ -19,6 +19,10 @@ namespace atomspace {
  */
 class TruthValue {
 public:
+    // Constants for numerical stability and default parameters
+    static constexpr float EPSILON = 0.0001f;
+    static constexpr float INDEFINITE_K = 10.0f;  // Controls confidence growth rate
+    
     /**
      * Create a truth value tensor [strength, confidence]
      */
@@ -138,14 +142,14 @@ public:
         
         // Weighted average of strengths, weighted by confidence
         float totalConfidence = c1 + c2;
-        if (totalConfidence < 0.0001f) {
+        if (totalConfidence < EPSILON) {
             return create(0.5f, 0.0f);
         }
         
         float strength = (s1 * c1 + s2 * c2) / totalConfidence;
         
         // Combined confidence: higher than either alone, but not simply additive
-        float confidence = (c1 * c2) / (c1 + c2 - c1 * c2 + 0.0001f);
+        float confidence = (c1 * c2) / (c1 + c2 - c1 * c2 + EPSILON);
         confidence = std::min(confidence, 0.99f);
         
         return create(strength, confidence);
@@ -285,9 +289,8 @@ public:
         float strength = static_cast<float>(positiveCount) / totalCount;
         
         // Confidence: based on sample size with diminishing returns
-        // Using formula: n / (n + k) where k is a constant
-        const float k = 10.0f; // Controls how quickly confidence increases
-        float confidence = static_cast<float>(totalCount) / (totalCount + k);
+        // Using formula: n / (n + k) where k controls confidence growth rate
+        float confidence = static_cast<float>(totalCount) / (totalCount + INDEFINITE_K);
         
         return create(strength, confidence);
     }
