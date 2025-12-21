@@ -29,11 +29,28 @@ public:
         LINK,
         CONCEPT_NODE,
         PREDICATE_NODE,
+        VARIABLE_NODE,
         INHERITANCE_LINK,
         EVALUATION_LINK,
         LIST_LINK,
         ORDERED_LINK,
-        UNORDERED_LINK
+        UNORDERED_LINK,
+        // Logical links
+        AND_LINK,
+        OR_LINK,
+        NOT_LINK,
+        // Set membership links
+        MEMBER_LINK,
+        SUBSET_LINK,
+        // Contextual links
+        CONTEXT_LINK,
+        // Temporal links
+        SEQUENTIAL_LINK,
+        SIMULTANEOUS_LINK,
+        // Similarity links
+        SIMILARITY_LINK,
+        // Execution links
+        EXECUTION_LINK
     };
     
     virtual ~Atom() = default;
@@ -106,6 +123,7 @@ public:
             case Type::NODE: return "Node";
             case Type::CONCEPT_NODE: return "ConceptNode";
             case Type::PREDICATE_NODE: return "PredicateNode";
+            case Type::VARIABLE_NODE: return "VariableNode";
             default: return "Node";
         }
     }
@@ -161,6 +179,16 @@ public:
             case Type::LIST_LINK: return "ListLink";
             case Type::ORDERED_LINK: return "OrderedLink";
             case Type::UNORDERED_LINK: return "UnorderedLink";
+            case Type::AND_LINK: return "AndLink";
+            case Type::OR_LINK: return "OrLink";
+            case Type::NOT_LINK: return "NotLink";
+            case Type::MEMBER_LINK: return "MemberLink";
+            case Type::SUBSET_LINK: return "SubsetLink";
+            case Type::CONTEXT_LINK: return "ContextLink";
+            case Type::SEQUENTIAL_LINK: return "SequentialLink";
+            case Type::SIMULTANEOUS_LINK: return "SimultaneousLink";
+            case Type::SIMILARITY_LINK: return "SimilarityLink";
+            case Type::EXECUTION_LINK: return "ExecutionLink";
             default: return "Link";
         }
     }
