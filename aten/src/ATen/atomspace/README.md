@@ -61,6 +61,40 @@ Provides persistence support. Features:
 - Preserves truth values and attention values
 - Export to string representation
 
+### PatternMatcher (NEW in Phase 2)
+Pattern matching and unification engine. Features:
+- Variable binding with VariableNode
+- Pattern queries with wildcards
+- Unification of structures
+- Substitution of variables with bindings
+- Essential for inference rules
+
+### TruthValue (NEW in Phase 2)
+PLN (Probabilistic Logic Networks) truth value formulas. Features:
+- Strength-confidence representation [s, c]
+- Deduction: (A→B, B→C) ⊢ A→C
+- Induction: generalize from observations
+- Abduction: reason to best explanation
+- Revision: combine evidence
+- Logical operations: conjunction, disjunction, negation
+- Implication and similarity measures
+
+### ForwardChainer (NEW in Phase 2)
+Forward chaining inference engine. Features:
+- Apply inference rules to derive new knowledge
+- Deduction, induction, abduction rules
+- Attention-guided inference
+- Confidence threshold filtering
+- Iterative rule application
+
+### BackwardChainer (NEW in Phase 2)
+Goal-directed backward chaining. Features:
+- Prove goals by working backwards
+- Construct proof trees
+- Recursive subgoal solving
+- Query provable facts
+- Best proof selection by confidence
+
 ## Usage Example
 
 ```cpp
@@ -98,6 +132,129 @@ cat->setTruthValue(torch::tensor({0.9f, 0.8f}));
 
 // Query atoms by type
 auto conceptNodes = space.getAtomsByType(Atom::Type::CONCEPT_NODE);
+```
+
+## PLN (Probabilistic Logic Networks) Examples
+
+### Pattern Matching with Variables
+
+```cpp
+#include <ATen/atomspace/ATenSpace.h>
+
+using namespace at::atomspace;
+
+AtomSpace space;
+
+// Create knowledge base
+auto cat = createConceptNode(space, "cat");
+auto dog = createConceptNode(space, "dog");
+auto mammal = createConceptNode(space, "mammal");
+
+createInheritanceLink(space, cat, mammal);
+createInheritanceLink(space, dog, mammal);
+
+// Create pattern with variable
+auto varX = createVariableNode(space, "$X");
+auto pattern = createInheritanceLink(space, varX, mammal);
+
+// Find all matches
+auto matches = PatternMatcher::findMatches(space, pattern);
+// Returns: cat→mammal and dog→mammal with bindings for $X
+```
+
+### Truth Value Reasoning
+
+```cpp
+// Deduction: A→B, B→C ⊢ A→C
+auto tvAB = TruthValue::create(0.9f, 0.8f);  // [strength, confidence]
+auto tvBC = TruthValue::create(0.85f, 0.9f);
+auto tvAC = TruthValue::deduction(tvAB, tvBC);
+// Result: A→C with computed probability
+
+// Induction from observations
+auto tvInduced = TruthValue::induction(8, 10);  // 8 positive out of 10
+// Result: strength ≈ 0.8, confidence based on sample size
+
+// Logical operations
+auto tvA = TruthValue::create(0.8f, 0.9f);
+auto tvB = TruthValue::create(0.7f, 0.85f);
+auto tvAnd = TruthValue::conjunction(tvA, tvB);
+auto tvOr = TruthValue::disjunction(tvA, tvB);
+auto tvNot = TruthValue::negation(tvA);
+```
+
+### Forward Chaining Inference
+
+```cpp
+AtomSpace space;
+
+// Build knowledge base
+auto cat = createConceptNode(space, "cat");
+auto mammal = createConceptNode(space, "mammal");
+auto animal = createConceptNode(space, "animal");
+
+auto catMammal = createInheritanceLink(space, cat, mammal);
+catMammal->setTruthValue(TruthValue::create(0.95f, 0.9f));
+
+auto mammalAnimal = createInheritanceLink(space, mammal, animal);
+mammalAnimal->setTruthValue(TruthValue::create(0.98f, 0.95f));
+
+// Run forward chaining
+ForwardChainer chainer(space);
+chainer.setConfidenceThreshold(0.1f);
+int newInferences = chainer.run();
+
+// Check inferred knowledge
+auto catAnimal = space.getLink(Atom::Type::INHERITANCE_LINK, {cat, animal});
+// catAnimal now exists with computed truth value
+```
+
+### Backward Chaining (Goal-Directed Reasoning)
+
+```cpp
+AtomSpace space;
+
+// Facts
+auto socrates = createConceptNode(space, "Socrates");
+auto human = createConceptNode(space, "human");
+auto mortal = createConceptNode(space, "mortal");
+
+auto socratesHuman = createInheritanceLink(space, socrates, human);
+socratesHuman->setTruthValue(TruthValue::create(1.0f, 0.95f));
+
+auto humanMortal = createInheritanceLink(space, human, mortal);
+humanMortal->setTruthValue(TruthValue::create(0.99f, 0.99f));
+
+// Goal: Prove Socrates is mortal
+auto goal = createInheritanceLink(space, socrates, mortal);
+
+BackwardChainer chainer(space);
+chainer.addRule(std::make_shared<DeductionRule>());
+
+auto proofs = chainer.prove(goal);
+// Returns proof tree showing: socrates→human, human→mortal ⊢ socrates→mortal
+
+// Query truth value of goal
+auto tv = chainer.query(goal);
+// Returns high confidence truth value
+```
+
+### Attention-Guided Inference
+
+```cpp
+AtomSpace space;
+AttentionBank attentionBank;
+
+auto bird = createConceptNode(space, "bird");
+auto canFly = createConceptNode(space, "can-fly");
+
+auto birdFly = createInheritanceLink(space, bird, canFly);
+birdFly->setTruthValue(TruthValue::create(0.9f, 0.8f));
+attentionBank.setSTI(birdFly, 100.0f);  // High attention
+
+ForwardChainer chainer(space);
+int newInferences = chainer.run(&attentionBank);
+// Inference prioritizes high-attention atoms
 ```
 
 ## API Reference
@@ -237,6 +394,114 @@ static bool load(AtomSpace& space, const std::string& filename);
 static std::string toString(const AtomSpace& space);
 ```
 
+### PLN Pattern Matching Operations (NEW)
+
+```cpp
+// Pattern matching with variables
+bool match(const Handle& pattern, const Handle& target, VariableBinding& bindings);
+std::vector<std::pair<Handle, VariableBinding>> findMatches(AtomSpace& space, 
+                                                            const Handle& pattern);
+
+// Substitution
+Handle substitute(const Handle& pattern, const VariableBinding& bindings, 
+                 AtomSpace& space);
+
+// Unification
+bool unify(const Handle& pattern1, const Handle& pattern2, 
+          VariableBinding& bindings);
+
+// Pattern queries
+void query(AtomSpace& space, const Handle& pattern,
+          std::function<void(const Handle&, const VariableBinding&)> callback);
+
+// Pattern utilities
+bool isVariable(const Handle& atom);
+bool hasVariables(const Handle& pattern);
+std::vector<Handle> getVariables(const Handle& pattern);
+```
+
+### PLN Truth Value Operations (NEW)
+
+```cpp
+// Create truth values [strength, confidence]
+Tensor create(float strength, float confidence);
+float getStrength(const Tensor& tv);
+float getConfidence(const Tensor& tv);
+
+// Inference formulas
+Tensor deduction(const Tensor& tv1, const Tensor& tv2);      // A→B, B→C ⊢ A→C
+Tensor induction(int positiveCount, int totalCount);         // Generalize from observations
+Tensor abduction(const Tensor& tvB, const Tensor& tvAB);    // B, A→B ⊢ A
+Tensor revision(const Tensor& tv1, const Tensor& tv2);       // Combine evidence
+
+// Logical operations
+Tensor conjunction(const Tensor& tvA, const Tensor& tvB);    // A ∧ B
+Tensor disjunction(const Tensor& tvA, const Tensor& tvB);    // A ∨ B
+Tensor negation(const Tensor& tvA);                          // ¬A
+Tensor implication(const Tensor& tvA, const Tensor& tvB);    // A → B
+
+// Utilities
+float similarity(const Tensor& tv1, const Tensor& tv2);
+Tensor indefinite(int positiveCount, int negativeCount);
+Tensor defaultTV();
+Tensor trueTV();
+Tensor falseTV();
+```
+
+### Forward Chaining Operations (NEW)
+
+```cpp
+// Create forward chainer
+ForwardChainer(AtomSpace& space);
+
+// Configuration
+void setMaxIterations(int maxIter);
+void setConfidenceThreshold(float threshold);
+void addRule(std::shared_ptr<InferenceRule> rule);
+
+// Run inference
+int run(AttentionBank* attentionBank = nullptr);  // Returns number of new atoms
+int step(Handle target = nullptr, AttentionBank* attentionBank = nullptr);
+
+// Apply rules manually
+std::vector<Handle> applyRules(const std::vector<Handle>& premises);
+```
+
+### Backward Chaining Operations (NEW)
+
+```cpp
+// Create backward chainer
+BackwardChainer(AtomSpace& space);
+
+// Configuration
+void setMaxDepth(int depth);
+void setMaxProofs(int maxProofs);
+void addRule(std::shared_ptr<InferenceRule> rule);
+
+// Prove goals
+std::vector<std::shared_ptr<Proof>> prove(const Handle& goal);
+std::shared_ptr<Proof> getBestProof(const Handle& goal);
+bool canProve(const Handle& goal);
+Tensor query(const Handle& goal);  // Returns truth value if provable
+```
+
+### Inference Rules (NEW)
+
+Built-in rules:
+- `DeductionRule`: A→B, B→C ⊢ A→C
+- `InductionRule`: Generalize from observations
+- `AbductionRule`: B, A→B ⊢ A (reason to best explanation)
+
+Custom rules can be created by inheriting from `InferenceRule`:
+```cpp
+class InferenceRule {
+    virtual std::string getName() const = 0;
+    virtual bool canApply(const std::vector<Handle>& premises) const = 0;
+    virtual std::vector<Handle> apply(const std::vector<Handle>& premises, 
+                                     AtomSpace& space) = 0;
+};
+```
+
 ## Atom Types
 
 ### Node Types
@@ -250,6 +515,7 @@ static std::string toString(const AtomSpace& space);
 #### Basic Links
 - `LINK` - Generic link
 - `INHERITANCE_LINK` - Represents inheritance (is-a) relationships
+- `IMPLICATION_LINK` - Represents logical implication (A→B) **[NEW]**
 - `EVALUATION_LINK` - Represents predicate evaluation
 - `LIST_LINK` - Ordered list of atoms
 - `ORDERED_LINK` - Generic ordered link

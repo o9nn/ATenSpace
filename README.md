@@ -21,6 +21,10 @@ ATenSpace bridges symbolic AI and neural AI by combining:
 - 🎯 **Attention Mechanisms**: AttentionBank for cognitive focus management
 - 💾 **Persistence**: Serialization support for saving/loading knowledge graphs
 - 🔗 **Rich Link Types**: Logical, temporal, contextual, and set-based relationships
+- 🧮 **PLN Reasoning**: Probabilistic Logic Networks for uncertain inference **(NEW)**
+- 🔍 **Pattern Matching**: Variable binding and unification for queries **(NEW)**
+- ⚡ **Forward Chaining**: Automatic inference of new knowledge **(NEW)**
+- 🎯 **Backward Chaining**: Goal-directed reasoning and proof search **(NEW)**
 
 ## Quick Start
 
@@ -48,7 +52,7 @@ auto results = space.querySimilar(torch::randn({128}), /*k=*/5);
 
 ## Architecture
 
-ATenSpace implements the core concepts from OpenCog's AtomSpace:
+ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoning:
 
 - **Atoms** - Immutable knowledge units (base class)
   - **Nodes** - Represent entities/concepts (can have tensor embeddings)
@@ -59,12 +63,19 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace:
 - **Serializer** - Provides persistence (save/load)
 - **Truth Values** - Tensor-based probabilistic values
 - **Incoming Sets** - Track what links reference each atom
+- **PatternMatcher** - Pattern matching with variable binding **(NEW)**
+- **TruthValue** - PLN formulas for uncertain reasoning **(NEW)**
+- **ForwardChainer** - Forward chaining inference engine **(NEW)**
+- **BackwardChainer** - Goal-directed backward chaining **(NEW)**
 
 ## Documentation
 
 - [ATenSpace API Documentation](aten/src/ATen/atomspace/README.md)
 - [Example Usage](aten/src/ATen/atomspace/example.cpp)
+- [Advanced Examples](aten/src/ATen/atomspace/example_advanced.cpp)
+- [PLN Examples](aten/src/ATen/atomspace/example_pln.cpp) **(NEW)**
 - [Tests](aten/src/ATen/atomspace/test.cpp)
+- [PLN Tests](aten/src/ATen/atomspace/test_pln.cpp) **(NEW)**
 
 ## Building
 
@@ -77,18 +88,33 @@ make
 # Run example
 ./atomspace_example
 
+# Run advanced examples
+./atomspace_example_advanced
+
+# Run PLN examples (NEW)
+./atomspace_example_pln
+
 # Run tests
 ./atomspace_test
+
+# Run advanced tests
+./atomspace_test_advanced
+
+# Run PLN tests (NEW)
+./atomspace_test_pln
 ```
 
 ## Use Cases
 
 - **Knowledge Graphs**: Represent complex domain knowledge
 - **Semantic Search**: Find similar concepts using embeddings
-- **Reasoning Systems**: Build inference engines over knowledge
+- **Reasoning Systems**: Build inference engines over knowledge **(Enhanced with PLN)**
 - **NLP Applications**: Combine symbolic and neural language understanding
 - **Recommendation Systems**: Graph-based recommendations with embeddings
-- **Cognitive Architectures**: Foundation for AGI research
+- **Cognitive Architectures**: Foundation for AGI research **(PLN-powered)**
+- **Probabilistic Reasoning**: Handle uncertain knowledge with truth values **(NEW)**
+- **Automated Theorem Proving**: Goal-directed reasoning with backward chaining **(NEW)**
+- **Knowledge Discovery**: Derive new facts via forward chaining **(NEW)**
 
 ## Comparison with OpenCog AtomSpace
 
