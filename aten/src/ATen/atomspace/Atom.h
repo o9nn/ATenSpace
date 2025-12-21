@@ -31,6 +31,7 @@ public:
         PREDICATE_NODE,
         VARIABLE_NODE,
         INHERITANCE_LINK,
+        IMPLICATION_LINK,
         EVALUATION_LINK,
         LIST_LINK,
         ORDERED_LINK,
@@ -175,6 +176,7 @@ public:
         switch(type_) {
             case Type::LINK: return "Link";
             case Type::INHERITANCE_LINK: return "InheritanceLink";
+            case Type::IMPLICATION_LINK: return "ImplicationLink";
             case Type::EVALUATION_LINK: return "EvaluationLink";
             case Type::LIST_LINK: return "ListLink";
             case Type::ORDERED_LINK: return "OrderedLink";

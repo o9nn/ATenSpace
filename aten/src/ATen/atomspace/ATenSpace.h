@@ -13,6 +13,10 @@
  * - AtomSpace: Container managing the hypergraph database
  * - TimeServer: Manages temporal information for atoms
  * - AttentionBank: Manages attention values and cognitive focus
+ * - PatternMatcher: Pattern matching and unification engine
+ * - TruthValue: PLN truth value formulas
+ * - ForwardChainer: Forward chaining inference engine
+ * - BackwardChainer: Backward chaining (goal-directed) inference
  * 
  * Features:
  * - Tensor-based truth values and embeddings
@@ -22,6 +26,8 @@
  * - Temporal reasoning and time-stamped atoms
  * - Attention allocation mechanisms
  * - Persistent storage via serialization
+ * - PLN (Probabilistic Logic Networks) reasoning
+ * - Pattern matching with variable binding
  */
 
 #include <ATen/atomspace/Atom.h>
@@ -29,6 +35,10 @@
 #include <ATen/atomspace/TimeServer.h>
 #include <ATen/atomspace/AttentionBank.h>
 #include <ATen/atomspace/Serializer.h>
+#include <ATen/atomspace/PatternMatcher.h>
+#include <ATen/atomspace/TruthValue.h>
+#include <ATen/atomspace/ForwardChainer.h>
+#include <ATen/atomspace/BackwardChainer.h>
 
 namespace at {
 namespace atomspace {
@@ -72,6 +82,14 @@ inline Atom::Handle createInheritanceLink(
     Atom::Handle from,
     Atom::Handle to) {
     return space.addLink(Atom::Type::INHERITANCE_LINK, {from, to});
+}
+
+// Create an implication link: A implies B (logical implication)
+inline Atom::Handle createImplicationLink(
+    AtomSpace& space,
+    Atom::Handle antecedent,
+    Atom::Handle consequent) {
+    return space.addLink(Atom::Type::IMPLICATION_LINK, {antecedent, consequent});
 }
 
 // Create an evaluation link: predicate(args...)
