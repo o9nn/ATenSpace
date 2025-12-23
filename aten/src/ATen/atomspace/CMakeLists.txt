@@ -18,6 +18,11 @@ add_executable(atomspace_example_advanced example_advanced.cpp)
 target_link_libraries(atomspace_example_advanced ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_example_advanced PROPERTY CXX_STANDARD 17)
 
+# PLN example executable
+add_executable(atomspace_example_pln example_pln.cpp)
+target_link_libraries(atomspace_example_pln ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_example_pln PROPERTY CXX_STANDARD 17)
+
 # Test executable
 add_executable(atomspace_test test.cpp)
 target_link_libraries(atomspace_test ${TORCH_LIBRARIES})
@@ -28,6 +33,11 @@ add_executable(atomspace_test_advanced test_advanced.cpp)
 target_link_libraries(atomspace_test_advanced ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_advanced PROPERTY CXX_STANDARD 17)
 
+# PLN test executable
+add_executable(atomspace_test_pln test_pln.cpp)
+target_link_libraries(atomspace_test_pln ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_pln PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
@@ -36,6 +46,10 @@ install(FILES
     TimeServer.h
     AttentionBank.h
     Serializer.h
+    PatternMatcher.h
+    TruthValue.h
+    ForwardChainer.h
+    BackwardChainer.h
     README.md
     DESTINATION include/ATen/atomspace
 )
