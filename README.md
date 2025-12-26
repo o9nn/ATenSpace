@@ -19,12 +19,13 @@ ATenSpace bridges symbolic AI and neural AI by combining:
 - 🎯 **Type-Safe**: Strong typing for atoms and links
 - ⏰ **Temporal Reasoning**: TimeServer for tracking temporal information
 - 🎯 **Attention Mechanisms**: AttentionBank for cognitive focus management
+- 🧠 **ECAN**: Economic Attention Networks for attention allocation **(NEW - Phase 3)**
 - 💾 **Persistence**: Serialization support for saving/loading knowledge graphs
 - 🔗 **Rich Link Types**: Logical, temporal, contextual, and set-based relationships
-- 🧮 **PLN Reasoning**: Probabilistic Logic Networks for uncertain inference **(NEW)**
-- 🔍 **Pattern Matching**: Variable binding and unification for queries **(NEW)**
-- ⚡ **Forward Chaining**: Automatic inference of new knowledge **(NEW)**
-- 🎯 **Backward Chaining**: Goal-directed reasoning and proof search **(NEW)**
+- 🧮 **PLN Reasoning**: Probabilistic Logic Networks for uncertain inference
+- 🔍 **Pattern Matching**: Variable binding and unification for queries
+- ⚡ **Forward Chaining**: Automatic inference of new knowledge
+- 🎯 **Backward Chaining**: Goal-directed reasoning and proof search
 
 ## Quick Start
 
@@ -52,7 +53,7 @@ auto results = space.querySimilar(torch::randn({128}), /*k=*/5);
 
 ## Architecture
 
-ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoning:
+ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoning and ECAN:
 
 - **Atoms** - Immutable knowledge units (base class)
   - **Nodes** - Represent entities/concepts (can have tensor embeddings)
@@ -60,22 +61,30 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoni
 - **AtomSpace** - Container managing the hypergraph database
 - **TimeServer** - Tracks temporal information and events
 - **AttentionBank** - Manages attention values and cognitive focus
+- **ECAN** - Economic Attention Networks **(NEW - Phase 3)**
+  - **HebbianLinks** - Track co-occurrence correlations
+  - **ImportanceSpreading** - Attention propagation
+  - **ForgettingAgent** - Memory management
+  - **RentAgent** - Economic scarcity mechanism
+  - **WageAgent** - Reward useful knowledge
 - **Serializer** - Provides persistence (save/load)
 - **Truth Values** - Tensor-based probabilistic values
 - **Incoming Sets** - Track what links reference each atom
-- **PatternMatcher** - Pattern matching with variable binding **(NEW)**
-- **TruthValue** - PLN formulas for uncertain reasoning **(NEW)**
-- **ForwardChainer** - Forward chaining inference engine **(NEW)**
-- **BackwardChainer** - Goal-directed backward chaining **(NEW)**
+- **PatternMatcher** - Pattern matching with variable binding
+- **TruthValue** - PLN formulas for uncertain reasoning
+- **ForwardChainer** - Forward chaining inference engine
+- **BackwardChainer** - Goal-directed backward chaining
 
 ## Documentation
 
 - [ATenSpace API Documentation](aten/src/ATen/atomspace/README.md)
 - [Example Usage](aten/src/ATen/atomspace/example.cpp)
 - [Advanced Examples](aten/src/ATen/atomspace/example_advanced.cpp)
-- [PLN Examples](aten/src/ATen/atomspace/example_pln.cpp) **(NEW)**
+- [PLN Examples](aten/src/ATen/atomspace/example_pln.cpp)
+- [ECAN Examples](aten/src/ATen/atomspace/example_ecan.cpp) **(NEW - Phase 3)**
 - [Tests](aten/src/ATen/atomspace/test.cpp)
-- [PLN Tests](aten/src/ATen/atomspace/test_pln.cpp) **(NEW)**
+- [PLN Tests](aten/src/ATen/atomspace/test_pln.cpp)
+- [ECAN Tests](aten/src/ATen/atomspace/test_ecan.cpp) **(NEW - Phase 3)**
 
 ## Building
 
@@ -91,8 +100,11 @@ make
 # Run advanced examples
 ./atomspace_example_advanced
 
-# Run PLN examples (NEW)
+# Run PLN examples
 ./atomspace_example_pln
+
+# Run ECAN examples (NEW - Phase 3)
+./atomspace_example_ecan
 
 # Run tests
 ./atomspace_test
@@ -100,14 +112,18 @@ make
 # Run advanced tests
 ./atomspace_test_advanced
 
-# Run PLN tests (NEW)
+# Run PLN tests
 ./atomspace_test_pln
+
+# Run ECAN tests (NEW - Phase 3)
+./atomspace_test_ecan
 ```
 
 ## Use Cases
 
 - **Knowledge Graphs**: Represent complex domain knowledge
 - **Semantic Search**: Find similar concepts using embeddings
+- **Attention-Guided Reasoning**: Focus computational resources on important knowledge **(NEW - Phase 3)**
 - **Reasoning Systems**: Build inference engines over knowledge **(Enhanced with PLN)**
 - **NLP Applications**: Combine symbolic and neural language understanding
 - **Recommendation Systems**: Graph-based recommendations with embeddings
