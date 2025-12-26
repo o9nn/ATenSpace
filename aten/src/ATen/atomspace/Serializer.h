@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ATen/atomspace/Atom.h>
-#include <ATen/atomspace/AtomSpace.h>
+#include "Atom.h"
+#include "AtomSpace.h"
 #include <fstream>
 #include <sstream>
 #include <string>
