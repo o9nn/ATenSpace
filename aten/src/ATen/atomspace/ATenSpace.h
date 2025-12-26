@@ -13,6 +13,7 @@
  * - AtomSpace: Container managing the hypergraph database
  * - TimeServer: Manages temporal information for atoms
  * - AttentionBank: Manages attention values and cognitive focus
+ * - ECAN: Economic Attention Networks for attention allocation
  * - PatternMatcher: Pattern matching and unification engine
  * - TruthValue: PLN truth value formulas
  * - ForwardChainer: Forward chaining inference engine
@@ -24,7 +25,7 @@
  * - Thread-safe atom management
  * - Immutable atoms with unique identity
  * - Temporal reasoning and time-stamped atoms
- * - Attention allocation mechanisms
+ * - Attention allocation mechanisms (ECAN)
  * - Persistent storage via serialization
  * - PLN (Probabilistic Logic Networks) reasoning
  * - Pattern matching with variable binding
@@ -39,6 +40,7 @@
 #include <ATen/atomspace/TruthValue.h>
 #include <ATen/atomspace/ForwardChainer.h>
 #include <ATen/atomspace/BackwardChainer.h>
+#include <ATen/atomspace/ECAN.h>
 
 namespace at {
 namespace atomspace {
@@ -184,6 +186,49 @@ inline Atom::Handle createExecutionLink(
     const std::vector<Atom::Handle>& args) {
     auto listLink = space.addLink(Atom::Type::LIST_LINK, args);
     return space.addLink(Atom::Type::EXECUTION_LINK, {procedure, listLink});
+}
+
+// Create an execution link: execute(procedure, args...)
+inline Atom::Handle createExecutionLink(
+    AtomSpace& space,
+    Atom::Handle procedure,
+    const std::vector<Atom::Handle>& args) {
+    auto list = space.addLink(Atom::Type::LIST_LINK, args);
+    return space.addLink(Atom::Type::EXECUTION_LINK, {procedure, list});
+}
+
+// ECAN Hebbian link convenience functions
+
+// Create a symmetric Hebbian link (mutual reinforcement)
+inline Atom::Handle createSymmetricHebbianLink(
+    AtomSpace& space,
+    Atom::Handle atom1,
+    Atom::Handle atom2) {
+    return space.addLink(Atom::Type::SYMMETRIC_HEBBIAN_LINK, {atom1, atom2});
+}
+
+// Create an asymmetric Hebbian link (directional activation)
+inline Atom::Handle createAsymmetricHebbianLink(
+    AtomSpace& space,
+    Atom::Handle source,
+    Atom::Handle target) {
+    return space.addLink(Atom::Type::ASYMMETRIC_HEBBIAN_LINK, {source, target});
+}
+
+// Create an inverse Hebbian link (inhibition)
+inline Atom::Handle createInverseHebbianLink(
+    AtomSpace& space,
+    Atom::Handle atom1,
+    Atom::Handle atom2) {
+    return space.addLink(Atom::Type::INVERSE_HEBBIAN_LINK, {atom1, atom2});
+}
+
+// Create a generic Hebbian link
+inline Atom::Handle createHebbianLink(
+    AtomSpace& space,
+    Atom::Handle atom1,
+    Atom::Handle atom2) {
+    return space.addLink(Atom::Type::HEBBIAN_LINK, {atom1, atom2});
 }
 
 } // namespace atomspace

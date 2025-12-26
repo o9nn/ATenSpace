@@ -51,7 +51,12 @@ public:
         // Similarity links
         SIMILARITY_LINK,
         // Execution links
-        EXECUTION_LINK
+        EXECUTION_LINK,
+        // Hebbian links (for ECAN attention spreading)
+        HEBBIAN_LINK,
+        SYMMETRIC_HEBBIAN_LINK,
+        ASYMMETRIC_HEBBIAN_LINK,
+        INVERSE_HEBBIAN_LINK
     };
     
     virtual ~Atom() = default;
