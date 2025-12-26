@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.5)
 find_package(Torch REQUIRED)
 
 # Include directories
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/..)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${TORCH_INCLUDE_DIRS})
 
 # Example executable

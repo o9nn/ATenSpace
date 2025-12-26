@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ATen/atomspace/Atom.h>
+#include "Atom.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>

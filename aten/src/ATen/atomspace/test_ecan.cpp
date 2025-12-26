@@ -1,4 +1,4 @@
-#include <ATen/atomspace/ATenSpace.h>
+#include "ATenSpace.h"
 #include <cassert>
 #include <iostream>
 

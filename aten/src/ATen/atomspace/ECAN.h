@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ATen/atomspace/Atom.h>
-#include <ATen/atomspace/AtomSpace.h>
-#include <ATen/atomspace/AttentionBank.h>
+#include "Atom.h"
+#include "AtomSpace.h"
+#include "AttentionBank.h"
 #include <algorithm>
 #include <map>
 #include <mutex>
@@ -101,7 +101,7 @@ public:
                     
                     // Get link strength from truth value
                     auto tv = link->getTruthValue();
-                    float strength = tv.size() > 0 ? tv[0].item<float>() : 0.5f;
+                    float strength = (tv.defined() && tv.numel() > 0) ? tv[0].item().toFloat() : 0.5f;
                     
                     neighbors.push_back({other, strength});
                 }
@@ -155,14 +155,31 @@ private:
     void updateLinkBetween(Handle atom1, Handle atom2, Atom::Type link_type = Atom::Type::SYMMETRIC_HEBBIAN_LINK) {
         if (!atom1 || !atom2 || atom1 == atom2) return;
         
-        // Try to find existing link
-        auto existing = space_.getLink(link_type, {atom1, atom2});
+        // Try to find existing link by checking incoming sets
+        Handle existing = nullptr;
+        auto incoming = atom1->getIncomingSet();
+        for (const auto& weak_link : incoming) {
+            if (auto link = weak_link.lock()) {
+                if (link->getType() == link_type) {
+                    auto link_ptr = std::dynamic_pointer_cast<Link>(link);
+                    if (link_ptr) {
+                        auto outgoing = link_ptr->getOutgoingSet();
+                        if (outgoing.size() == 2 && 
+                            ((outgoing[0] == atom1 && outgoing[1] == atom2) ||
+                             (outgoing[0] == atom2 && outgoing[1] == atom1))) {
+                            existing = link;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         
         if (existing) {
             // Strengthen existing link
             auto tv = existing->getTruthValue();
-            float strength = tv.size() > 0 ? tv[0].item<float>() : 0.5f;
-            float confidence = tv.size() > 1 ? tv[1].item<float>() : 0.1f;
+            float strength = (tv.defined() && tv.numel() > 0) ? tv[0].item().toFloat() : 0.5f;
+            float confidence = (tv.defined() && tv.numel() > 1) ? tv[1].item().toFloat() : 0.1f;
             
             // Hebbian learning: increase strength and confidence
             constexpr float LEARNING_RATE = 0.1f;

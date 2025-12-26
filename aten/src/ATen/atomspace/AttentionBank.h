@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ATen/atomspace/Atom.h>
+#include "Atom.h"
 #include <algorithm>
 #include <map>
 #include <mutex>

@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ATen/atomspace/Atom.h>
-#include <ATen/atomspace/AtomSpace.h>
-#include <ATen/atomspace/PatternMatcher.h>
-#include <ATen/atomspace/TruthValue.h>
-#include <ATen/atomspace/AttentionBank.h>
+#include "Atom.h"
+#include "AtomSpace.h"
+#include "PatternMatcher.h"
+#include "TruthValue.h"
+#include "AttentionBank.h"
 #include <vector>
 #include <functional>
 #include <memory>

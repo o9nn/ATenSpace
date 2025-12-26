@@ -31,16 +31,16 @@
  * - Pattern matching with variable binding
  */
 
-#include <ATen/atomspace/Atom.h>
-#include <ATen/atomspace/AtomSpace.h>
-#include <ATen/atomspace/TimeServer.h>
-#include <ATen/atomspace/AttentionBank.h>
-#include <ATen/atomspace/Serializer.h>
-#include <ATen/atomspace/PatternMatcher.h>
-#include <ATen/atomspace/TruthValue.h>
-#include <ATen/atomspace/ForwardChainer.h>
-#include <ATen/atomspace/BackwardChainer.h>
-#include <ATen/atomspace/ECAN.h>
+#include "Atom.h"
+#include "AtomSpace.h"
+#include "TimeServer.h"
+#include "AttentionBank.h"
+#include "Serializer.h"
+#include "PatternMatcher.h"
+#include "TruthValue.h"
+#include "ForwardChainer.h"
+#include "BackwardChainer.h"
+#include "ECAN.h"
 
 namespace at {
 namespace atomspace {
@@ -186,15 +186,6 @@ inline Atom::Handle createExecutionLink(
     const std::vector<Atom::Handle>& args) {
     auto listLink = space.addLink(Atom::Type::LIST_LINK, args);
     return space.addLink(Atom::Type::EXECUTION_LINK, {procedure, listLink});
-}
-
-// Create an execution link: execute(procedure, args...)
-inline Atom::Handle createExecutionLink(
-    AtomSpace& space,
-    Atom::Handle procedure,
-    const std::vector<Atom::Handle>& args) {
-    auto list = space.addLink(Atom::Type::LIST_LINK, args);
-    return space.addLink(Atom::Type::EXECUTION_LINK, {procedure, list});
 }
 
 // ECAN Hebbian link convenience functions
