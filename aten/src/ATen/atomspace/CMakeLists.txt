@@ -28,6 +28,11 @@ add_executable(atomspace_example_ecan example_ecan.cpp)
 target_link_libraries(atomspace_example_ecan ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_example_ecan PROPERTY CXX_STANDARD 17)
 
+# Cognitive Engine example executable
+add_executable(atomspace_example_cognitive example_cognitive.cpp)
+target_link_libraries(atomspace_example_cognitive ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_example_cognitive PROPERTY CXX_STANDARD 17)
+
 # Test executable
 add_executable(atomspace_test test.cpp)
 target_link_libraries(atomspace_test ${TORCH_LIBRARIES})
@@ -48,6 +53,11 @@ add_executable(atomspace_test_ecan test_ecan.cpp)
 target_link_libraries(atomspace_test_ecan ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_ecan PROPERTY CXX_STANDARD 17)
 
+# Cognitive Engine test executable
+add_executable(atomspace_test_cognitive test_cognitive.cpp)
+target_link_libraries(atomspace_test_cognitive ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_cognitive PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
@@ -61,6 +71,8 @@ install(FILES
     ForwardChainer.h
     BackwardChainer.h
     ECAN.h
+    TensorLogicEngine.h
+    CognitiveEngine.h
     README.md
     DESTINATION include/ATen/atomspace
 )

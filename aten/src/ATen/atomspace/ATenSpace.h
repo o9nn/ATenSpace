@@ -18,6 +18,8 @@
  * - TruthValue: PLN truth value formulas
  * - ForwardChainer: Forward chaining inference engine
  * - BackwardChainer: Backward chaining (goal-directed) inference
+ * - TensorLogicEngine: GPU-accelerated batch logical operations
+ * - CognitiveEngine: Master algorithm integration framework
  * 
  * Features:
  * - Tensor-based truth values and embeddings
@@ -29,6 +31,8 @@
  * - Persistent storage via serialization
  * - PLN (Probabilistic Logic Networks) reasoning
  * - Pattern matching with variable binding
+ * - Tensor-based batch logical operations
+ * - Integrated cognitive architecture
  */
 
 #include "Atom.h"
@@ -41,6 +45,8 @@
 #include "ForwardChainer.h"
 #include "BackwardChainer.h"
 #include "ECAN.h"
+#include "TensorLogicEngine.h"
+#include "CognitiveEngine.h"
 
 namespace at {
 namespace atomspace {
