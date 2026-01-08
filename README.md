@@ -26,6 +26,8 @@ ATenSpace bridges symbolic AI and neural AI by combining:
 - 🔍 **Pattern Matching**: Variable binding and unification for queries
 - ⚡ **Forward Chaining**: Automatic inference of new knowledge
 - 🎯 **Backward Chaining**: Goal-directed reasoning and proof search
+- 🧠 **TensorLogicEngine**: GPU-accelerated batch logical operations **(NEW - Phase 4)**
+- 🎛️ **CognitiveEngine**: Master algorithm integration framework **(NEW - Phase 4)**
 
 ## Quick Start
 
@@ -74,6 +76,8 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoni
 - **TruthValue** - PLN formulas for uncertain reasoning
 - **ForwardChainer** - Forward chaining inference engine
 - **BackwardChainer** - Goal-directed backward chaining
+- **TensorLogicEngine** - GPU-accelerated batch logical inference **(NEW - Phase 4)**
+- **CognitiveEngine** - Master cognitive architecture orchestrator **(NEW - Phase 4)**
 
 ## Documentation
 
@@ -106,6 +110,9 @@ make
 # Run ECAN examples (NEW - Phase 3)
 ./atomspace_example_ecan
 
+# Run Cognitive Engine examples (NEW - Phase 4)
+./atomspace_example_cognitive
+
 # Run tests
 ./atomspace_test
 
@@ -117,6 +124,9 @@ make
 
 # Run ECAN tests (NEW - Phase 3)
 ./atomspace_test_ecan
+
+# Run Cognitive Engine tests (NEW - Phase 4)
+./atomspace_test_cognitive
 ```
 
 ## Use Cases
