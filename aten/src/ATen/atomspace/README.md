@@ -95,6 +95,37 @@ Goal-directed backward chaining. Features:
 - Query provable facts
 - Best proof selection by confidence
 
+### ECAN (NEW in Phase 3)
+Economic Attention Networks for attention allocation. Features:
+- Hebbian learning for link strength
+- Importance spreading across the graph
+- Forgetting mechanism for memory management
+- Rent collection for economic scarcity
+- Wage payment for useful knowledge
+- Attention diffusion dynamics
+
+### TensorLogicEngine (NEW in Phase 4)
+GPU-accelerated batch logical inference. Features:
+- Batch truth value computation (AND, OR, NOT, IMPLIES, etc.)
+- Parallel pattern matching across multiple targets
+- Vectorized inference rules
+- Batch deduction and similarity computation
+- Efficient filtering by truth value thresholds
+- Automatic CPU/GPU mode selection
+- Statistical analysis of truth value distributions
+
+### CognitiveEngine (NEW in Phase 4)
+Master algorithm integration framework. Features:
+- Orchestrates all cognitive subsystems (PLN, ECAN, pattern matching)
+- Cognitive cycle execution (attention → patterns → inference → goals)
+- Multiple cognitive modes (reactive, proactive, goal-directed, exploratory, balanced)
+- Goal management and pursuit
+- Pattern registration with callbacks
+- Learning from positive/negative examples
+- Query system with attention-guided inference
+- Comprehensive cognitive metrics tracking
+- Integration of temporal reasoning, attention allocation, and inference
+
 ## Usage Example
 
 ```cpp
@@ -589,13 +620,45 @@ make
 ## Future Enhancements
 
 Potential areas for expansion:
-- Pattern matching and unification ✅ VariableNode added
-- Backward chaining inference
-- Distributed atomspace support
+- ~~Pattern matching and unification~~ ✅ Implemented (Phase 2)
+- ~~Forward chaining inference~~ ✅ Implemented (Phase 2)
+- ~~Backward chaining inference~~ ✅ Implemented (Phase 2)
+- ~~ECAN (Economic Attention Networks)~~ ✅ Implemented (Phase 3)
+- ~~Tensor logic engine~~ ✅ Implemented (Phase 4)
+- ~~Cognitive engine integration framework~~ ✅ Implemented (Phase 4)
 - ~~Persistent storage (serialization)~~ ✅ Implemented
+- Distributed atomspace support
 - Python bindings
-- GPU-accelerated operations
+- Advanced GPU-accelerated batch operations
 - Advanced query languages
+- Meta-learning of inference rules
+- Neural-guided inference
+
+## Building and Running
+
+```bash
+# Navigate to the atomspace directory
+cd aten/src/ATen/atomspace
+
+# Build with CMake
+mkdir -p build && cd build
+cmake ..
+make
+
+# Run examples
+./atomspace_example              # Basic examples
+./atomspace_example_advanced     # Advanced features
+./atomspace_example_pln          # PLN reasoning
+./atomspace_example_ecan         # ECAN attention allocation
+./atomspace_example_cognitive    # Cognitive engine (NEW Phase 4)
+
+# Run tests
+./atomspace_test                 # Basic tests
+./atomspace_test_advanced        # Advanced tests
+./atomspace_test_pln             # PLN tests
+./atomspace_test_ecan            # ECAN tests
+./atomspace_test_cognitive       # Cognitive engine tests (NEW Phase 4)
+```
 
 ## References
 
