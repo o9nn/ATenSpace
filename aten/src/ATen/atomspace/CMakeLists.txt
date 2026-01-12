@@ -33,6 +33,16 @@ add_executable(atomspace_example_cognitive example_cognitive.cpp)
 target_link_libraries(atomspace_example_cognitive ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_example_cognitive PROPERTY CXX_STANDARD 17)
 
+# NLU example executable
+add_executable(atomspace_example_nlu example_nlu.cpp)
+target_link_libraries(atomspace_example_nlu ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_example_nlu PROPERTY CXX_STANDARD 17)
+
+# Vision example executable
+add_executable(atomspace_example_vision example_vision.cpp)
+target_link_libraries(atomspace_example_vision ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_example_vision PROPERTY CXX_STANDARD 17)
+
 # Test executable
 add_executable(atomspace_test test.cpp)
 target_link_libraries(atomspace_test ${TORCH_LIBRARIES})
@@ -58,6 +68,16 @@ add_executable(atomspace_test_cognitive test_cognitive.cpp)
 target_link_libraries(atomspace_test_cognitive ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_cognitive PROPERTY CXX_STANDARD 17)
 
+# NLU test executable
+add_executable(atomspace_test_nlu test_nlu.cpp)
+target_link_libraries(atomspace_test_nlu ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_nlu PROPERTY CXX_STANDARD 17)
+
+# Vision test executable
+add_executable(atomspace_test_vision test_vision.cpp)
+target_link_libraries(atomspace_test_vision ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_vision PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
@@ -73,6 +93,8 @@ install(FILES
     ECAN.h
     TensorLogicEngine.h
     CognitiveEngine.h
+    NLU.h
+    Vision.h
     README.md
     DESTINATION include/ATen/atomspace
 )

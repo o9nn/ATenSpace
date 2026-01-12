@@ -20,6 +20,8 @@
  * - BackwardChainer: Backward chaining (goal-directed) inference
  * - TensorLogicEngine: GPU-accelerated batch logical operations
  * - CognitiveEngine: Master algorithm integration framework
+ * - NLU: Natural Language Understanding for text processing
+ * - Vision: Visual perception and scene understanding
  * 
  * Features:
  * - Tensor-based truth values and embeddings
@@ -33,6 +35,9 @@
  * - Pattern matching with variable binding
  * - Tensor-based batch logical operations
  * - Integrated cognitive architecture
+ * - Natural language understanding and generation
+ * - Visual perception and scene understanding
+ * - Multimodal knowledge representation
  */
 
 #include "Atom.h"
@@ -47,6 +52,8 @@
 #include "ECAN.h"
 #include "TensorLogicEngine.h"
 #include "CognitiveEngine.h"
+#include "NLU.h"
+#include "Vision.h"
 
 namespace at {
 namespace atomspace {
