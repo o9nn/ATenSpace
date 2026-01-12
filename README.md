@@ -28,6 +28,8 @@ ATenSpace bridges symbolic AI and neural AI by combining:
 - 🎯 **Backward Chaining**: Goal-directed reasoning and proof search
 - 🧠 **TensorLogicEngine**: GPU-accelerated batch logical operations **(NEW - Phase 4)**
 - 🎛️ **CognitiveEngine**: Master algorithm integration framework **(NEW - Phase 4)**
+- 📝 **NLU**: Natural Language Understanding and generation **(NEW - Phase 5)**
+- 👁️ **Vision**: Visual perception and scene understanding **(NEW - Phase 5)**
 
 ## Quick Start
 
@@ -78,6 +80,18 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoni
 - **BackwardChainer** - Goal-directed backward chaining
 - **TensorLogicEngine** - GPU-accelerated batch logical inference **(NEW - Phase 4)**
 - **CognitiveEngine** - Master cognitive architecture orchestrator **(NEW - Phase 4)**
+- **NLU** - Natural Language Understanding for text processing **(NEW - Phase 5)**
+  - **TextProcessor** - Tokenization and preprocessing
+  - **EntityRecognizer** - Named entity recognition
+  - **RelationExtractor** - Semantic relation extraction
+  - **SemanticExtractor** - Text to knowledge graph conversion
+  - **LanguageGenerator** - Knowledge graph to text generation
+- **Vision** - Visual perception for grounded knowledge **(NEW - Phase 5)**
+  - **ObjectDetector** - Object detection integration
+  - **SpatialAnalyzer** - Spatial relationship extraction
+  - **SceneUnderstanding** - Scene graph construction
+  - **VisualReasoning** - Visual reasoning with PLN
+  - **MultimodalIntegration** - Vision + Language integration
 
 ## Documentation
 
@@ -86,6 +100,9 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoni
 - [Advanced Examples](aten/src/ATen/atomspace/example_advanced.cpp)
 - [PLN Examples](aten/src/ATen/atomspace/example_pln.cpp)
 - [ECAN Examples](aten/src/ATen/atomspace/example_ecan.cpp) **(NEW - Phase 3)**
+- [Cognitive Engine Examples](aten/src/ATen/atomspace/example_cognitive.cpp) **(NEW - Phase 4)**
+- [NLU Examples](aten/src/ATen/atomspace/example_nlu.cpp) **(NEW - Phase 5)**
+- [Vision Examples](aten/src/ATen/atomspace/example_vision.cpp) **(NEW - Phase 5)**
 - [Tests](aten/src/ATen/atomspace/test.cpp)
 - [PLN Tests](aten/src/ATen/atomspace/test_pln.cpp)
 - [ECAN Tests](aten/src/ATen/atomspace/test_ecan.cpp) **(NEW - Phase 3)**
@@ -113,6 +130,12 @@ make
 # Run Cognitive Engine examples (NEW - Phase 4)
 ./atomspace_example_cognitive
 
+# Run NLU examples (NEW - Phase 5)
+./atomspace_example_nlu
+
+# Run Vision examples (NEW - Phase 5)
+./atomspace_example_vision
+
 # Run tests
 ./atomspace_test
 
@@ -127,6 +150,12 @@ make
 
 # Run Cognitive Engine tests (NEW - Phase 4)
 ./atomspace_test_cognitive
+
+# Run NLU tests (NEW - Phase 5)
+./atomspace_test_nlu
+
+# Run Vision tests (NEW - Phase 5)
+./atomspace_test_vision
 ```
 
 ## Use Cases
@@ -141,6 +170,9 @@ make
 - **Probabilistic Reasoning**: Handle uncertain knowledge with truth values **(NEW)**
 - **Automated Theorem Proving**: Goal-directed reasoning with backward chaining **(NEW)**
 - **Knowledge Discovery**: Derive new facts via forward chaining **(NEW)**
+- **Natural Language Processing**: Text understanding and generation **(NEW - Phase 5)**
+- **Visual Understanding**: Scene understanding and visual reasoning **(NEW - Phase 5)**
+- **Multimodal AI**: Integrate vision, language, and knowledge **(NEW - Phase 5)**
 
 ## Comparison with OpenCog AtomSpace
 

@@ -126,6 +126,56 @@ Master algorithm integration framework. Features:
 - Comprehensive cognitive metrics tracking
 - Integration of temporal reasoning, attention allocation, and inference
 
+### NLU - Natural Language Understanding (NEW in Phase 5)
+
+Process natural language and convert to/from knowledge graphs:
+
+**Components**:
+- **TextProcessor**: Tokenization, normalization, sentence extraction
+- **EntityRecognizer**: Named entity recognition  
+- **RelationExtractor**: Extract semantic relations
+- **SemanticExtractor**: Text → Knowledge Graph
+- **LanguageGenerator**: Knowledge Graph → Text
+
+**Usage**:
+```cpp
+#include <ATen/atomspace/NLU.h>
+
+// Extract knowledge from text
+std::string text = "Socrates is a philosopher.";
+SemanticExtractor::extractToAtomSpace(space, text);
+
+// Generate language from knowledge
+auto atom = createInheritanceLink(space, socrates, philosopher);
+std::string sentence = LanguageGenerator::generate(atom);
+```
+
+### Vision - Visual Perception (NEW in Phase 5)
+
+Process visual scenes and build knowledge graphs:
+
+**Components**:
+- **ObjectDetector**: Object detection interface
+- **SpatialAnalyzer**: Spatial relationship extraction
+- **SceneUnderstanding**: Scene graph construction
+- **VisualReasoning**: Visual reasoning with PLN
+- **VisionProcessor**: End-to-end vision pipeline
+- **MultimodalIntegration**: Vision + Language integration
+
+**Usage**:
+```cpp
+#include <ATen/atomspace/Vision.h>
+
+// Process image with custom detector
+VisionProcessor::processImage(space, image, detectorFn);
+
+// Analyze spatial relationships
+auto relations = SpatialAnalyzer::analyzeSpatialRelations(objects);
+
+// Ground concepts in vision
+VisualReasoning::groundConcept(space, "pet", examples);
+```
+
 ## Usage Example
 
 ```cpp
@@ -615,9 +665,24 @@ make
 
 # Run the advanced features tests
 ./atomspace_test_advanced
+
+# Run PLN tests (NEW Phase 2)
+./atomspace_test_pln
+
+# Run ECAN tests (NEW Phase 3)
+./atomspace_test_ecan
+
+# Run Cognitive Engine tests (NEW Phase 4)
+./atomspace_test_cognitive
+
+# Run NLU tests (NEW Phase 5)
+./atomspace_test_nlu
+
+# Run Vision tests (NEW Phase 5)
+./atomspace_test_vision
 ```
 
-## Future Enhancements
+## Feature Status
 
 Potential areas for expansion:
 - ~~Pattern matching and unification~~ ✅ Implemented (Phase 2)
@@ -626,13 +691,17 @@ Potential areas for expansion:
 - ~~ECAN (Economic Attention Networks)~~ ✅ Implemented (Phase 3)
 - ~~Tensor logic engine~~ ✅ Implemented (Phase 4)
 - ~~Cognitive engine integration framework~~ ✅ Implemented (Phase 4)
+- ~~Natural Language Understanding~~ ✅ Implemented (Phase 5)
+- ~~Visual Perception~~ ✅ Implemented (Phase 5)
 - ~~Persistent storage (serialization)~~ ✅ Implemented
+- Integration with actual transformer models (BERT, GPT, etc.)
+- Integration with actual vision models (YOLO, ViT, etc.)
 - Distributed atomspace support
 - Python bindings
-- Advanced GPU-accelerated batch operations
 - Advanced query languages
 - Meta-learning of inference rules
 - Neural-guided inference
+- Embodied AI and robotics integration
 
 ## Building and Running
 
