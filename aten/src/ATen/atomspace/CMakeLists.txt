@@ -8,6 +8,40 @@ find_package(Torch REQUIRED)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${TORCH_INCLUDE_DIRS})
 
+# Python bindings option
+option(BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
+
+if(BUILD_PYTHON_BINDINGS)
+    # Find Python and pybind11
+    find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+    find_package(pybind11 CONFIG)
+    
+    if(NOT pybind11_FOUND)
+        # Try to use pip installed pybind11
+        execute_process(
+            COMMAND ${Python3_EXECUTABLE} -c "import pybind11; print(pybind11.get_cmake_dir())"
+            OUTPUT_VARIABLE pybind11_DIR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+        if(pybind11_DIR)
+            find_package(pybind11 CONFIG PATHS ${pybind11_DIR})
+        endif()
+    endif()
+    
+    if(pybind11_FOUND)
+        message(STATUS "Building Python bindings with pybind11")
+        pybind11_add_module(atenspace python_bindings.cpp)
+        target_link_libraries(atenspace PRIVATE ${TORCH_LIBRARIES})
+        set_property(TARGET atenspace PROPERTY CXX_STANDARD 17)
+        
+        # Install Python module
+        install(TARGETS atenspace LIBRARY DESTINATION .)
+    else()
+        message(WARNING "pybind11 not found. Skipping Python bindings. Install with: pip install pybind11")
+    endif()
+endif()
+
 # Example executable
 add_executable(atomspace_example example.cpp)
 target_link_libraries(atomspace_example ${TORCH_LIBRARIES})

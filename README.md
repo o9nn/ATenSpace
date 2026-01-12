@@ -30,8 +30,11 @@ ATenSpace bridges symbolic AI and neural AI by combining:
 - 🎛️ **CognitiveEngine**: Master algorithm integration framework **(NEW - Phase 4)**
 - 📝 **NLU**: Natural Language Understanding and generation **(NEW - Phase 5)**
 - 👁️ **Vision**: Visual perception and scene understanding **(NEW - Phase 5)**
+- 🐍 **Python Bindings**: Full Python API with PyTorch integration **(NEW - Phase 6)**
 
 ## Quick Start
+
+### C++ API
 
 ```cpp
 #include <ATen/atomspace/ATenSpace.h>
@@ -54,6 +57,31 @@ auto dog = createConceptNode(space, "dog", torch::randn({128}));
 // Query similar concepts
 auto results = space.querySimilar(torch::randn({128}), /*k=*/5);
 ```
+
+### Python API
+
+```python
+import torch
+import atenspace as at
+
+# Create knowledge base
+space = at.AtomSpace()
+
+# Add concepts
+cat = at.create_concept_node(space, "cat")
+mammal = at.create_concept_node(space, "mammal")
+
+# Create relationships
+inheritance = at.create_inheritance_link(space, cat, mammal)
+
+# Add embeddings for similarity search
+dog = at.create_concept_node(space, "dog", torch.randn(128))
+
+# Query similar concepts
+similar = space.query_similar(torch.randn(128), k=5)
+```
+
+See [Python API Documentation](docs/PYTHON_API.md) for complete guide.
 
 ## Architecture
 
@@ -95,19 +123,27 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoni
 
 ## Documentation
 
+### C++ Documentation
 - [ATenSpace API Documentation](aten/src/ATen/atomspace/README.md)
 - [Example Usage](aten/src/ATen/atomspace/example.cpp)
 - [Advanced Examples](aten/src/ATen/atomspace/example_advanced.cpp)
 - [PLN Examples](aten/src/ATen/atomspace/example_pln.cpp)
-- [ECAN Examples](aten/src/ATen/atomspace/example_ecan.cpp) **(NEW - Phase 3)**
-- [Cognitive Engine Examples](aten/src/ATen/atomspace/example_cognitive.cpp) **(NEW - Phase 4)**
-- [NLU Examples](aten/src/ATen/atomspace/example_nlu.cpp) **(NEW - Phase 5)**
-- [Vision Examples](aten/src/ATen/atomspace/example_vision.cpp) **(NEW - Phase 5)**
+- [ECAN Examples](aten/src/ATen/atomspace/example_ecan.cpp) **(Phase 3)**
+- [Cognitive Engine Examples](aten/src/ATen/atomspace/example_cognitive.cpp) **(Phase 4)**
+- [NLU Examples](aten/src/ATen/atomspace/example_nlu.cpp) **(Phase 5)**
+- [Vision Examples](aten/src/ATen/atomspace/example_vision.cpp) **(Phase 5)**
 - [Tests](aten/src/ATen/atomspace/test.cpp)
 - [PLN Tests](aten/src/ATen/atomspace/test_pln.cpp)
-- [ECAN Tests](aten/src/ATen/atomspace/test_ecan.cpp) **(NEW - Phase 3)**
+- [ECAN Tests](aten/src/ATen/atomspace/test_ecan.cpp) **(Phase 3)**
 
-## Building
+### Python Documentation **(NEW - Phase 6)**
+- [Python API Guide](docs/PYTHON_API.md)
+- [Python Basic Examples](examples/python/basic_usage.py)
+- [Python Advanced Examples](examples/python/advanced_usage.py)
+
+## Installation
+
+### C++ Library
 
 ```bash
 cd aten
@@ -130,32 +166,40 @@ make
 # Run Cognitive Engine examples (NEW - Phase 4)
 ./atomspace_example_cognitive
 
-# Run NLU examples (NEW - Phase 5)
+# Run NLU examples (Phase 5)
 ./atomspace_example_nlu
 
-# Run Vision examples (NEW - Phase 5)
+# Run Vision examples (Phase 5)
 ./atomspace_example_vision
 
 # Run tests
 ./atomspace_test
-
-# Run advanced tests
 ./atomspace_test_advanced
-
-# Run PLN tests
 ./atomspace_test_pln
-
-# Run ECAN tests (NEW - Phase 3)
 ./atomspace_test_ecan
-
-# Run Cognitive Engine tests (NEW - Phase 4)
 ./atomspace_test_cognitive
-
-# Run NLU tests (NEW - Phase 5)
 ./atomspace_test_nlu
-
-# Run Vision tests (NEW - Phase 5)
 ./atomspace_test_vision
+```
+
+### Python Package **(NEW - Phase 6)**
+
+```bash
+# Install dependencies
+pip install torch numpy pybind11
+
+# Install ATenSpace Python package
+pip install -e .
+
+# Or build with Python bindings enabled
+cd aten
+mkdir -p build && cd build
+cmake -DBUILD_PYTHON_BINDINGS=ON ..
+make
+
+# Run Python examples
+python examples/python/basic_usage.py
+python examples/python/advanced_usage.py
 ```
 
 ## Use Cases
@@ -170,9 +214,11 @@ make
 - **Probabilistic Reasoning**: Handle uncertain knowledge with truth values **(NEW)**
 - **Automated Theorem Proving**: Goal-directed reasoning with backward chaining **(NEW)**
 - **Knowledge Discovery**: Derive new facts via forward chaining **(NEW)**
-- **Natural Language Processing**: Text understanding and generation **(NEW - Phase 5)**
-- **Visual Understanding**: Scene understanding and visual reasoning **(NEW - Phase 5)**
-- **Multimodal AI**: Integrate vision, language, and knowledge **(NEW - Phase 5)**
+- **Natural Language Processing**: Text understanding and generation **(Phase 5)**
+- **Visual Understanding**: Scene understanding and visual reasoning **(Phase 5)**
+- **Multimodal AI**: Integrate vision, language, and knowledge **(Phase 5)**
+- **Python Development**: Rapid prototyping with Python API **(NEW - Phase 6)**
+- **ML Integration**: Easy integration with PyTorch models **(NEW - Phase 6)**
 
 ## Comparison with OpenCog AtomSpace
 
@@ -184,6 +230,7 @@ make
 | GPU Support | Limited | Full via ATen/PyTorch |
 | Similarity Search | Pattern matching | Tensor operations |
 | Backend | Custom memory mgmt | ATen tensor library |
+| Python Bindings | Cython (partial) | pybind11 (complete) |
 
 ## Example: Knowledge Graph with Embeddings
 
