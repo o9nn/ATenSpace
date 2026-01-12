@@ -266,18 +266,21 @@ public:
 private:
     static std::string extractVerb(const std::string& text) {
         // Simple verb extraction - look for common verb patterns
-        std::regex verbRegex(R"(\b\w+(?:ed|s|ing)?\b)");
+        // Note: This is a simplified heuristic. Real implementation would use
+        // dependency parsing or ML-based POS tagging
+        std::regex verbRegex(R"(\b\w*(?:ed|ing)\b)");  // Past tense and gerund forms
         auto verbsBegin = std::sregex_iterator(text.begin(), text.end(), verbRegex);
         auto verbsEnd = std::sregex_iterator();
         
         for (auto it = verbsBegin; it != verbsEnd; ++it) {
             std::string word = it->str();
-            // Simple heuristic: if it's not "is", "are", "was", etc., it might be a verb
-            if (word.length() > 2) {
+            // Filter out obvious non-verbs
+            if (word.length() > 3) {
                 return TextProcessor::normalize(word);
             }
         }
         
+        // Fallback: return empty string if no verb found
         return "";
     }
 };
@@ -303,6 +306,8 @@ public:
         
         // Add entities to AtomSpace as ConceptNodes
         std::unordered_map<std::string, Atom::Handle> entityNodes;
+        size_t entityCounter = 0;
+        
         for (const auto& entity : entities) {
             Atom::Handle node;
             if (textEmbedding.defined() && textEmbedding.numel() > 0) {
@@ -314,7 +319,11 @@ public:
             
             // Set truth value based on confidence
             node->setTruthValue(TruthValue::create(entity.confidence, 0.9f));
-            entityNodes[entity.text] = node;
+            
+            // Create unique key using entity text and position for disambiguation
+            std::string key = entity.text + "_" + std::to_string(entity.startIdx) + "_" + 
+                              std::to_string(entityCounter++);
+            entityNodes[key] = node;
         }
         
         // Add relations to AtomSpace

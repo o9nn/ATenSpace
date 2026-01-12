@@ -173,7 +173,7 @@ void test_objectDetectorInterface() {
     
     // Test with default detector (should return empty for now)
     auto objects = ObjectDetector::detect(image);
-    assert(objects.size() == 0);  // Default implementation returns empty
+    assert(objects.empty());  // Default implementation returns empty
     
     // Test with custom detector function
     auto customDetector = [](const Tensor& img) -> std::vector<DetectedObject> {

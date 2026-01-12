@@ -59,6 +59,11 @@ struct BoundingBox {
         float intersection = (x2 - x1) * (y2 - y1);
         float union_area = area() + other.area() - intersection;
         
+        // Handle edge case of zero area boxes
+        if (union_area == 0.0f) {
+            return 0.0f;
+        }
+        
         return intersection / union_area;
     }
 };
@@ -220,8 +225,10 @@ public:
             // Set truth value based on detection confidence
             node->setTruthValue(TruthValue::create(obj.confidence, 0.9f));
             
-            // Store for relation creation
-            std::string key = obj.label + "_" + std::to_string(objectNodes.size());
+            // Store for relation creation with unique identifier
+            // Using position and counter to handle duplicate labels
+            std::string key = obj.label + "_" + std::to_string(static_cast<int>(obj.bbox.x * 1000)) + 
+                              "_" + std::to_string(objectNodes.size());
             objectNodes[key] = node;
         }
         
