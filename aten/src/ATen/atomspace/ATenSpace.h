@@ -22,6 +22,7 @@
  * - CognitiveEngine: Master algorithm integration framework
  * - NLU: Natural Language Understanding for text processing
  * - Vision: Visual perception and scene understanding
+ * - ATenNN: Neural Networks Framework with pre-trained models (BERT, GPT, ViT, YOLO)
  * 
  * Features:
  * - Tensor-based truth values and embeddings
@@ -54,6 +55,8 @@
 #include "CognitiveEngine.h"
 #include "NLU.h"
 #include "Vision.h"
+#include "ATenNN.h"
+#include "PretrainedModels.h"
 
 namespace at {
 namespace atomspace {
