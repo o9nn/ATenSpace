@@ -117,6 +117,11 @@ add_executable(atomspace_test_vision test_vision.cpp)
 target_link_libraries(atomspace_test_vision ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_vision PROPERTY CXX_STANDARD 17)
 
+# Neural Network test executable
+add_executable(atomspace_test_nn test_nn.cpp)
+target_link_libraries(atomspace_test_nn ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_nn PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 

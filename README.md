@@ -197,6 +197,7 @@ make
 ./atomspace_test_cognitive
 ./atomspace_test_nlu
 ./atomspace_test_vision
+./atomspace_test_nn
 ```
 
 ### Python Package **(NEW - Phase 6)**
