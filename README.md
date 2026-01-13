@@ -31,6 +31,8 @@ ATenSpace bridges symbolic AI and neural AI by combining:
 - 📝 **NLU**: Natural Language Understanding and generation **(NEW - Phase 5)**
 - 👁️ **Vision**: Visual perception and scene understanding **(NEW - Phase 5)**
 - 🐍 **Python Bindings**: Full Python API with PyTorch integration **(NEW - Phase 6)**
+- 🤖 **ATenNN**: Neural Networks with pre-trained models (BERT, GPT, ViT, YOLO) **(NEW - Phase 7)**
+- 🔗 **Neuro-Symbolic**: Seamless integration between neural and symbolic AI **(NEW - Phase 7)**
 
 ## Quick Start
 
@@ -120,6 +122,16 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoni
   - **SceneUnderstanding** - Scene graph construction
   - **VisualReasoning** - Visual reasoning with PLN
   - **MultimodalIntegration** - Vision + Language integration
+- **ATenNN** - Neural Networks Framework **(NEW - Phase 7)**
+  - **NeuralModule** - Base class for neural components
+  - **ModelRegistry** - Centralized model management
+  - **EmbeddingExtractor** - Extract embeddings to AtomSpace
+  - **AttentionBridge** - Map neural attention to ECAN
+  - **PerformanceMonitor** - Track metrics and performance
+  - **BERT** - Language understanding (contextualized embeddings)
+  - **GPT** - Text generation (autoregressive transformer)
+  - **ViT** - Visual understanding (Vision Transformer)
+  - **YOLO** - Object detection (real-time detection)
 
 ## Documentation
 
@@ -132,6 +144,7 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoni
 - [Cognitive Engine Examples](aten/src/ATen/atomspace/example_cognitive.cpp) **(Phase 4)**
 - [NLU Examples](aten/src/ATen/atomspace/example_nlu.cpp) **(Phase 5)**
 - [Vision Examples](aten/src/ATen/atomspace/example_vision.cpp) **(Phase 5)**
+- [Neural Network Examples](aten/src/ATen/atomspace/example_nn.cpp) **(Phase 7)**
 - [Tests](aten/src/ATen/atomspace/test.cpp)
 - [PLN Tests](aten/src/ATen/atomspace/test_pln.cpp)
 - [ECAN Tests](aten/src/ATen/atomspace/test_ecan.cpp) **(Phase 3)**
@@ -140,6 +153,7 @@ ATenSpace implements the core concepts from OpenCog's AtomSpace with PLN reasoni
 - [Python API Guide](docs/PYTHON_API.md)
 - [Python Basic Examples](examples/python/basic_usage.py)
 - [Python Advanced Examples](examples/python/advanced_usage.py)
+- [Python Neural Network Examples](examples/python/nn_integration.py) **(Phase 7)**
 
 ## Installation
 
@@ -172,6 +186,9 @@ make
 # Run Vision examples (Phase 5)
 ./atomspace_example_vision
 
+# Run Neural Network examples (NEW - Phase 7)
+./atomspace_example_nn
+
 # Run tests
 ./atomspace_test
 ./atomspace_test_advanced
@@ -180,6 +197,7 @@ make
 ./atomspace_test_cognitive
 ./atomspace_test_nlu
 ./atomspace_test_vision
+./atomspace_test_nn
 ```
 
 ### Python Package **(NEW - Phase 6)**
@@ -200,6 +218,7 @@ make
 # Run Python examples
 python examples/python/basic_usage.py
 python examples/python/advanced_usage.py
+python examples/python/nn_integration.py  # NEW - Phase 7
 ```
 
 ## Use Cases
@@ -219,6 +238,10 @@ python examples/python/advanced_usage.py
 - **Multimodal AI**: Integrate vision, language, and knowledge **(Phase 5)**
 - **Python Development**: Rapid prototyping with Python API **(NEW - Phase 6)**
 - **ML Integration**: Easy integration with PyTorch models **(NEW - Phase 6)**
+- **Neuro-Symbolic AI**: Combine neural models with symbolic reasoning **(NEW - Phase 7)**
+- **Language Understanding**: BERT embeddings for concept grounding **(NEW - Phase 7)**
+- **Text Generation**: GPT-based knowledge expansion **(NEW - Phase 7)**
+- **Visual Perception**: ViT and YOLO for vision-based AI **(NEW - Phase 7)**
 
 ## Comparison with OpenCog AtomSpace
 

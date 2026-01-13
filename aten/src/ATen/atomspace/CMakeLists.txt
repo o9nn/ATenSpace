@@ -77,6 +77,11 @@ add_executable(atomspace_example_vision example_vision.cpp)
 target_link_libraries(atomspace_example_vision ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_example_vision PROPERTY CXX_STANDARD 17)
 
+# Neural Network (ATenNN) example executable
+add_executable(atomspace_example_nn example_nn.cpp)
+target_link_libraries(atomspace_example_nn ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_example_nn PROPERTY CXX_STANDARD 17)
+
 # Test executable
 add_executable(atomspace_test test.cpp)
 target_link_libraries(atomspace_test ${TORCH_LIBRARIES})
@@ -112,6 +117,11 @@ add_executable(atomspace_test_vision test_vision.cpp)
 target_link_libraries(atomspace_test_vision ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_vision PROPERTY CXX_STANDARD 17)
 
+# Neural Network test executable
+add_executable(atomspace_test_nn test_nn.cpp)
+target_link_libraries(atomspace_test_nn ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_nn PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
@@ -129,6 +139,8 @@ install(FILES
     CognitiveEngine.h
     NLU.h
     Vision.h
+    ATenNN.h
+    PretrainedModels.h
     README.md
     DESTINATION include/ATen/atomspace
 )
