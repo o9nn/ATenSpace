@@ -32,3 +32,9 @@ __pycache__/
 
 # Generated files
 *.log
+
+# Exported models (Phase 8)
+models/
+*.pt
+*_tokenizer/
+*_config.json
