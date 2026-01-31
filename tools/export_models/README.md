@@ -36,11 +36,27 @@ python export_gpt2.py --model gpt2-medium --output models/gpt2_medium.pt
 
 ### ViT (Vision Transformer)
 
-Coming soon...
+Export ViT-base (default):
+```bash
+python export_vit.py
+```
+
+Export a specific ViT model:
+```bash
+python export_vit.py --model google/vit-large-patch16-224 --output models/vit_large.pt
+```
 
 ### YOLO
 
-Coming soon...
+Export YOLOv5 (from torch.hub):
+```bash
+python export_yolo.py --model yolov5s --output models/yolov5s.pt
+```
+
+Export simplified YOLO (no internet required):
+```bash
+python export_yolo.py --simplified --output models/yolo_simple.pt
+```
 
 ## Output Files
 
