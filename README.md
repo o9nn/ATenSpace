@@ -33,6 +33,7 @@ ATenSpace bridges symbolic AI and neural AI by combining:
 - 🐍 **Python Bindings**: Full Python API with PyTorch integration **(NEW - Phase 6)**
 - 🤖 **ATenNN**: Neural Networks with pre-trained models (BERT, GPT, ViT, YOLO) **(NEW - Phase 7)**
 - 🔗 **Neuro-Symbolic**: Seamless integration between neural and symbolic AI **(NEW - Phase 7)**
+- 📦 **Real Models**: Load actual HuggingFace models via TorchScript **(NEW - Phase 8)**
 
 ## Quick Start
 
@@ -219,6 +220,28 @@ make
 python examples/python/basic_usage.py
 python examples/python/advanced_usage.py
 python examples/python/nn_integration.py  # NEW - Phase 7
+```
+
+### Phase 8: Real Pre-trained Models **(NEW - Phase 8)**
+
+```bash
+# Export models from HuggingFace
+cd tools/export_models
+
+# Export individual models
+python export_bert.py --output ../../models/bert_base.pt
+python export_gpt2.py --output ../../models/gpt2.pt
+python export_vit.py --output ../../models/vit_base.pt
+python export_yolo.py --output ../../models/yolov5s.pt
+
+# Or export all models at once
+python export_all.py --output-dir ../../models
+
+# Build and run C++ example
+cd ../../aten/build
+cmake ..
+make atomspace_example_model_loader
+./atomspace_example_model_loader
 ```
 
 ## Use Cases

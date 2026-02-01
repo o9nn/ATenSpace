@@ -82,6 +82,11 @@ add_executable(atomspace_example_nn example_nn.cpp)
 target_link_libraries(atomspace_example_nn ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_example_nn PROPERTY CXX_STANDARD 17)
 
+# Model Loader example executable (Phase 8)
+add_executable(atomspace_example_model_loader example_model_loader.cpp)
+target_link_libraries(atomspace_example_model_loader ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_example_model_loader PROPERTY CXX_STANDARD 17)
+
 # Test executable
 add_executable(atomspace_test test.cpp)
 target_link_libraries(atomspace_test ${TORCH_LIBRARIES})
@@ -141,6 +146,7 @@ install(FILES
     Vision.h
     ATenNN.h
     PretrainedModels.h
+    ModelLoader.h
     README.md
     DESTINATION include/ATen/atomspace
 )
