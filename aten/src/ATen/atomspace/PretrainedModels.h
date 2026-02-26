@@ -43,7 +43,7 @@ public:
      * Create BERT with randomly initialized weights (built-in mode).
      */
     BERTModel(const ModelConfig& config)
-        : config_(config), device_(config.device), use_torchscript_(false) {
+        : config_(config), device_(config.device), use_torchscript_(false), torchscript_path_("") {
         buildModel();
     }
     
@@ -53,7 +53,7 @@ public:
      * @param device Device to load model on
      */
     BERTModel(const std::string& model_path, torch::Device device = torch::kCPU)
-        : device_(device), use_torchscript_(true), torchscript_path_(model_path) {
+        : config_(), device_(device), use_torchscript_(true), torchscript_path_(model_path) {
         loadTorchScriptModel();
     }
     
@@ -233,7 +233,7 @@ public:
      * Create GPT with randomly initialized weights (built-in mode).
      */
     GPTModel(const ModelConfig& config)
-        : config_(config), device_(config.device), use_torchscript_(false) {
+        : config_(config), device_(config.device), use_torchscript_(false), torchscript_path_("") {
         buildModel();
     }
     
@@ -243,7 +243,7 @@ public:
      * @param device Device to load model on
      */
     GPTModel(const std::string& model_path, torch::Device device = torch::kCPU)
-        : device_(device), use_torchscript_(true), torchscript_path_(model_path) {
+        : config_(), device_(device), use_torchscript_(true), torchscript_path_(model_path) {
         loadTorchScriptModel();
     }
     
@@ -413,7 +413,7 @@ public:
      * Create ViT with randomly initialized weights (built-in mode).
      */
     ViTModel(const ModelConfig& config)
-        : config_(config), device_(config.device), use_torchscript_(false) {
+        : config_(config), device_(config.device), use_torchscript_(false), torchscript_path_("") {
         patch_size_ = 16;  // 16x16 patches
         image_size_ = 224;  // 224x224 images
         num_patches_ = (image_size_ / patch_size_) * (image_size_ / patch_size_);
@@ -426,7 +426,7 @@ public:
      * @param device Device to load model on
      */
     ViTModel(const std::string& model_path, torch::Device device = torch::kCPU)
-        : device_(device), use_torchscript_(true), torchscript_path_(model_path) {
+        : config_(), device_(device), use_torchscript_(true), torchscript_path_(model_path) {
         patch_size_ = 16;
         image_size_ = 224;
         num_patches_ = (image_size_ / patch_size_) * (image_size_ / patch_size_);
@@ -633,7 +633,7 @@ public:
      * Create YOLO with randomly initialized weights (built-in mode).
      */
     YOLOModel(const ModelConfig& config)
-        : config_(config), device_(config.device), use_torchscript_(false) {
+        : config_(config), device_(config.device), use_torchscript_(false), torchscript_path_("") {
         buildModel();
     }
     
@@ -643,7 +643,7 @@ public:
      * @param device Device to load model on
      */
     YOLOModel(const std::string& model_path, torch::Device device = torch::kCPU)
-        : device_(device), use_torchscript_(true), torchscript_path_(model_path) {
+        : config_(), device_(device), use_torchscript_(true), torchscript_path_(model_path) {
         loadTorchScriptModel();
     }
     

@@ -169,16 +169,6 @@ void test_config_loading() {
 void test_torchscript_model_wrapper() {
     std::cout << "\n=== Test 5: TorchScriptModel Wrapper ===" << std::endl;
     
-    // Create a simple traced module for testing
-    // We'll create a minimal module using C++
-    
-    // Create a simple identity module
-    struct SimpleModule : torch::jit::Module {
-        SimpleModule() {
-            // Empty constructor
-        }
-    };
-    
     // Test that device management works
     torch::Device cpu_device(torch::kCPU);
     
