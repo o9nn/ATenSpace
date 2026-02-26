@@ -8,8 +8,9 @@
  * - NLU (Natural Language Understanding)
  * - Vision (Visual Perception)
  * - CognitiveEngine (Integrated reasoning)
+ * - ModelLoader (TorchScript model loading) - Phase 8
  * 
- * Phase 6 - Production Integration
+ * Phase 8 - Model Loading Integration
  */
 
 #include <pybind11/pybind11.h>
@@ -18,6 +19,7 @@
 #include <torch/extension.h>
 
 #include "ATenSpace.h"
+#include "ModelLoader.h"
 
 namespace py = pybind11;
 using namespace at::atomspace;
@@ -481,6 +483,51 @@ PYBIND11_MODULE(atenspace, m) {
         .def("answer_visual_question", &MultimodalIntegration::answerVisualQuestion,
              py::arg("question"), py::arg("visual_atoms"));
 
+    // ============================================================
+    // MODEL LOADER - Phase 8
+    // ============================================================
+    
+    py::class_<nn::LoadedModelConfig>(m, "LoadedModelConfig")
+        .def(py::init<>())
+        .def_readwrite("model_name", &nn::LoadedModelConfig::model_name)
+        .def_readwrite("hidden_size", &nn::LoadedModelConfig::hidden_size)
+        .def_readwrite("num_hidden_layers", &nn::LoadedModelConfig::num_hidden_layers)
+        .def_readwrite("num_attention_heads", &nn::LoadedModelConfig::num_attention_heads)
+        .def_readwrite("vocab_size", &nn::LoadedModelConfig::vocab_size)
+        .def_readwrite("max_seq_length", &nn::LoadedModelConfig::max_seq_length)
+        .def_readwrite("max_position_embeddings", &nn::LoadedModelConfig::max_position_embeddings)
+        .def_readwrite("type_vocab_size", &nn::LoadedModelConfig::type_vocab_size);
+
+    py::class_<nn::TorchScriptModel, std::shared_ptr<nn::TorchScriptModel>>(m, "TorchScriptModel")
+        .def("forward", &nn::TorchScriptModel::forward,
+             py::arg("inputs"))
+        .def("to", &nn::TorchScriptModel::to,
+             py::arg("device"))
+        .def("get_device", &nn::TorchScriptModel::getDevice);
+
+    py::class_<nn::ModelLoader>(m, "ModelLoader")
+        .def(py::init<>())
+        .def("load_torchscript_model", &nn::ModelLoader::loadTorchScriptModel,
+             py::arg("model_path"),
+             py::arg("device") = torch::kCPU,
+             py::arg("use_cache") = true)
+        .def("load_model_config", &nn::ModelLoader::loadModelConfig,
+             py::arg("config_path"))
+        .def("clear_cache", &nn::ModelLoader::clearCache)
+        .def_static("model_exists", &nn::ModelLoader::modelExists,
+                    py::arg("model_path"))
+        .def("get_default_device", &nn::ModelLoader::getDefaultDevice);
+
+    // Helper functions for loading specific model types
+    m.def("load_bert_model", &nn::loadBERTModel,
+          py::arg("model_path") = "models/bert_base.pt");
+    m.def("load_gpt2_model", &nn::loadGPT2Model,
+          py::arg("model_path") = "models/gpt2.pt");
+    m.def("load_vit_model", &nn::loadViTModel,
+          py::arg("model_path") = "models/vit_base.pt");
+    m.def("load_yolo_model", &nn::loadYOLOModel,
+          py::arg("model_path") = "models/yolov5.pt");
+
     // Module version
-    m.attr("__version__") = "0.6.0";
+    m.attr("__version__") = "0.8.0";
 }

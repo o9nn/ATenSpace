@@ -12,10 +12,14 @@
  * These integrations enable the cognitive architecture to leverage
  * state-of-the-art neural models for language understanding, generation,
  * and visual perception.
+ * 
+ * Phase 8 Enhancement: Support for TorchScript model loading
  */
 
 #include "ATenNN.h"
+#include "ModelLoader.h"
 #include <torch/torch.h>
+#include <torch/script.h>
 
 namespace at {
 namespace atomspace {
@@ -28,16 +32,53 @@ namespace nn {
 /**
  * BERT-style transformer model for language understanding.
  * Provides contextualized embeddings for text inputs.
+ * 
+ * Supports two modes:
+ * - Built-in: Uses randomly initialized weights (for testing/prototyping)
+ * - TorchScript: Loads real pre-trained weights from exported model
  */
 class BERTModel : public NeuralModule {
 public:
+    /**
+     * Create BERT with randomly initialized weights (built-in mode).
+     */
     BERTModel(const ModelConfig& config)
-        : config_(config), device_(config.device) {
+        : config_(config), device_(config.device), use_torchscript_(false) {
         buildModel();
+    }
+    
+    /**
+     * Create BERT from a TorchScript exported model (production mode).
+     * @param model_path Path to the .pt TorchScript file
+     * @param device Device to load model on
+     */
+    BERTModel(const std::string& model_path, torch::Device device = torch::kCPU)
+        : device_(device), use_torchscript_(true), torchscript_path_(model_path) {
+        loadTorchScriptModel();
     }
     
     Tensor forward(const Tensor& input) override {
         torch::NoGradGuard no_grad;
+        
+        if (use_torchscript_ && torchscript_model_) {
+            // Use TorchScript model
+            auto input_device = input.to(device_);
+            auto attention_mask = torch::ones_like(input_device);
+            
+            std::vector<torch::jit::IValue> inputs;
+            inputs.push_back(input_device);
+            inputs.push_back(attention_mask);
+            
+            auto output = torchscript_model_->forward(inputs);
+            
+            // Handle output format (BaseModelOutputWithPooling)
+            if (output.isTuple()) {
+                return output.toTuple()->elements()[0].toTensor();
+            }
+            return output.toTensor();
+        }
+        
+        // Use built-in model
         model_->eval();
         
         // Input is token IDs [batch, seq_len]
@@ -61,6 +102,9 @@ public:
     }
     
     std::string getName() const override {
+        if (use_torchscript_) {
+            return "bert-torchscript";
+        }
         return config_.model_name;
     }
     
@@ -70,15 +114,30 @@ public:
     
     void to(const torch::Device& device) override {
         device_ = device;
-        model_->to(device);
+        if (use_torchscript_ && torchscript_model_) {
+            torchscript_model_->to(device);
+        } else if (model_) {
+            model_->to(device);
+        }
     }
     
     void train() override {
-        model_->train();
+        if (!use_torchscript_ && model_) {
+            model_->train();
+        }
     }
     
     void eval() override {
-        model_->eval();
+        if (!use_torchscript_ && model_) {
+            model_->eval();
+        }
+    }
+    
+    /**
+     * Check if using TorchScript model.
+     */
+    bool usingTorchScript() const {
+        return use_torchscript_;
     }
     
     /**
@@ -97,11 +156,23 @@ public:
 private:
     ModelConfig config_;
     torch::Device device_;
+    bool use_torchscript_;
+    std::string torchscript_path_;
+    
+    // Built-in model components
     torch::nn::Sequential model_{nullptr};
     torch::nn::Embedding embedding_{nullptr};
     torch::nn::Embedding position_embedding_{nullptr};
     torch::nn::LayerNorm layer_norm_{nullptr};
     std::vector<torch::nn::Sequential> transformer_layers_;
+    
+    // TorchScript model
+    std::shared_ptr<TorchScriptModel> torchscript_model_;
+    
+    void loadTorchScriptModel() {
+        ModelLoader loader;
+        torchscript_model_ = loader.loadTorchScriptModel(torchscript_path_, device_);
+    }
     
     void buildModel() {
         // Token embeddings
@@ -151,16 +222,51 @@ private:
 /**
  * GPT-style autoregressive transformer for text generation.
  * Generates text conditioned on context.
+ * 
+ * Supports two modes:
+ * - Built-in: Uses randomly initialized weights (for testing/prototyping)
+ * - TorchScript: Loads real pre-trained weights from exported model
  */
 class GPTModel : public NeuralModule {
 public:
+    /**
+     * Create GPT with randomly initialized weights (built-in mode).
+     */
     GPTModel(const ModelConfig& config)
-        : config_(config), device_(config.device) {
+        : config_(config), device_(config.device), use_torchscript_(false) {
         buildModel();
+    }
+    
+    /**
+     * Create GPT from a TorchScript exported model (production mode).
+     * @param model_path Path to the .pt TorchScript file
+     * @param device Device to load model on
+     */
+    GPTModel(const std::string& model_path, torch::Device device = torch::kCPU)
+        : device_(device), use_torchscript_(true), torchscript_path_(model_path) {
+        loadTorchScriptModel();
     }
     
     Tensor forward(const Tensor& input) override {
         torch::NoGradGuard no_grad;
+        
+        if (use_torchscript_ && torchscript_model_) {
+            // Use TorchScript model
+            auto input_device = input.to(device_);
+            
+            std::vector<torch::jit::IValue> inputs;
+            inputs.push_back(input_device);
+            
+            auto output = torchscript_model_->forward(inputs);
+            
+            // Handle output format (CausalLMOutputWithCrossAttentions)
+            if (output.isTuple()) {
+                return output.toTuple()->elements()[0].toTensor();
+            }
+            return output.toTensor();
+        }
+        
+        // Use built-in model
         model_->eval();
         
         // Similar to BERT but with causal masking
@@ -181,6 +287,9 @@ public:
     }
     
     std::string getName() const override {
+        if (use_torchscript_) {
+            return "gpt-torchscript";
+        }
         return config_.model_name;
     }
     
@@ -190,15 +299,30 @@ public:
     
     void to(const torch::Device& device) override {
         device_ = device;
-        model_->to(device);
+        if (use_torchscript_ && torchscript_model_) {
+            torchscript_model_->to(device);
+        } else if (model_) {
+            model_->to(device);
+        }
     }
     
     void train() override {
-        model_->train();
+        if (!use_torchscript_ && model_) {
+            model_->train();
+        }
     }
     
     void eval() override {
-        model_->eval();
+        if (!use_torchscript_ && model_) {
+            model_->eval();
+        }
+    }
+    
+    /**
+     * Check if using TorchScript model.
+     */
+    bool usingTorchScript() const {
+        return use_torchscript_;
     }
     
     /**
@@ -225,11 +349,23 @@ public:
 private:
     ModelConfig config_;
     torch::Device device_;
+    bool use_torchscript_;
+    std::string torchscript_path_;
+    
+    // Built-in model components
     torch::nn::Sequential model_{nullptr};
     torch::nn::Embedding embedding_{nullptr};
     torch::nn::Embedding position_embedding_{nullptr};
     std::vector<torch::nn::Sequential> transformer_layers_;
     torch::nn::Linear output_projection_{nullptr};
+    
+    // TorchScript model
+    std::shared_ptr<TorchScriptModel> torchscript_model_;
+    
+    void loadTorchScriptModel() {
+        ModelLoader loader;
+        torchscript_model_ = loader.loadTorchScriptModel(torchscript_path_, device_);
+    }
     
     void buildModel() {
         embedding_ = torch::nn::Embedding(config_.vocab_size, config_.hidden_size);
@@ -266,19 +402,57 @@ private:
 /**
  * Vision Transformer for image understanding.
  * Processes images as sequences of patches.
+ * 
+ * Supports two modes:
+ * - Built-in: Uses randomly initialized weights (for testing/prototyping)
+ * - TorchScript: Loads real pre-trained weights from exported model
  */
 class ViTModel : public NeuralModule {
 public:
+    /**
+     * Create ViT with randomly initialized weights (built-in mode).
+     */
     ViTModel(const ModelConfig& config)
-        : config_(config), device_(config.device) {
+        : config_(config), device_(config.device), use_torchscript_(false) {
         patch_size_ = 16;  // 16x16 patches
         image_size_ = 224;  // 224x224 images
         num_patches_ = (image_size_ / patch_size_) * (image_size_ / patch_size_);
         buildModel();
     }
     
+    /**
+     * Create ViT from a TorchScript exported model (production mode).
+     * @param model_path Path to the .pt TorchScript file
+     * @param device Device to load model on
+     */
+    ViTModel(const std::string& model_path, torch::Device device = torch::kCPU)
+        : device_(device), use_torchscript_(true), torchscript_path_(model_path) {
+        patch_size_ = 16;
+        image_size_ = 224;
+        num_patches_ = (image_size_ / patch_size_) * (image_size_ / patch_size_);
+        loadTorchScriptModel();
+    }
+    
     Tensor forward(const Tensor& input) override {
         torch::NoGradGuard no_grad;
+        
+        if (use_torchscript_ && torchscript_model_) {
+            // Use TorchScript model
+            auto input_device = input.to(device_);
+            
+            std::vector<torch::jit::IValue> inputs;
+            inputs.push_back(input_device);
+            
+            auto output = torchscript_model_->forward(inputs);
+            
+            // Handle output format (BaseModelOutputWithPooling)
+            if (output.isTuple()) {
+                return output.toTuple()->elements()[0].toTensor();
+            }
+            return output.toTensor();
+        }
+        
+        // Use built-in model
         model_->eval();
         
         // Input is image [batch, 3, H, W]
@@ -304,6 +478,9 @@ public:
     }
     
     std::string getName() const override {
+        if (use_torchscript_) {
+            return "vit-torchscript";
+        }
         return config_.model_name;
     }
     
@@ -313,15 +490,30 @@ public:
     
     void to(const torch::Device& device) override {
         device_ = device;
-        model_->to(device);
+        if (use_torchscript_ && torchscript_model_) {
+            torchscript_model_->to(device);
+        } else if (model_) {
+            model_->to(device);
+        }
     }
     
     void train() override {
-        model_->train();
+        if (!use_torchscript_ && model_) {
+            model_->train();
+        }
     }
     
     void eval() override {
-        model_->eval();
+        if (!use_torchscript_ && model_) {
+            model_->eval();
+        }
+    }
+    
+    /**
+     * Check if using TorchScript model.
+     */
+    bool usingTorchScript() const {
+        return use_torchscript_;
     }
     
     /**
@@ -338,6 +530,10 @@ public:
 private:
     ModelConfig config_;
     torch::Device device_;
+    bool use_torchscript_;
+    std::string torchscript_path_;
+    
+    // Built-in model components
     torch::nn::Sequential model_{nullptr};
     torch::nn::Linear patch_projection_{nullptr};
     Tensor cls_token_;
@@ -347,6 +543,14 @@ private:
     int64_t patch_size_;
     int64_t image_size_;
     int64_t num_patches_;
+    
+    // TorchScript model
+    std::shared_ptr<TorchScriptModel> torchscript_model_;
+    
+    void loadTorchScriptModel() {
+        ModelLoader loader;
+        torchscript_model_ = loader.loadTorchScriptModel(torchscript_path_, device_);
+    }
     
     void buildModel() {
         int64_t patch_dim = 3 * patch_size_ * patch_size_;
@@ -411,6 +615,10 @@ private:
 /**
  * YOLO-style object detection model.
  * Detects and localizes objects in images.
+ * 
+ * Supports two modes:
+ * - Built-in: Uses randomly initialized weights (for testing/prototyping)
+ * - TorchScript: Loads real pre-trained weights from exported model
  */
 class YOLOModel : public NeuralModule {
 public:
@@ -421,13 +629,43 @@ public:
         std::string class_name;
     };
     
+    /**
+     * Create YOLO with randomly initialized weights (built-in mode).
+     */
     YOLOModel(const ModelConfig& config)
-        : config_(config), device_(config.device) {
+        : config_(config), device_(config.device), use_torchscript_(false) {
         buildModel();
+    }
+    
+    /**
+     * Create YOLO from a TorchScript exported model (production mode).
+     * @param model_path Path to the .pt TorchScript file
+     * @param device Device to load model on
+     */
+    YOLOModel(const std::string& model_path, torch::Device device = torch::kCPU)
+        : device_(device), use_torchscript_(true), torchscript_path_(model_path) {
+        loadTorchScriptModel();
     }
     
     Tensor forward(const Tensor& input) override {
         torch::NoGradGuard no_grad;
+        
+        if (use_torchscript_ && torchscript_model_) {
+            // Use TorchScript model
+            auto input_device = input.to(device_);
+            
+            std::vector<torch::jit::IValue> inputs;
+            inputs.push_back(input_device);
+            
+            auto output = torchscript_model_->forward(inputs);
+            
+            if (output.isTuple()) {
+                return output.toTuple()->elements()[0].toTensor();
+            }
+            return output.toTensor();
+        }
+        
+        // Use built-in model
         model_->eval();
         
         // Input is image [batch, 3, H, W]
@@ -438,6 +676,9 @@ public:
     }
     
     std::string getName() const override {
+        if (use_torchscript_) {
+            return "yolo-torchscript";
+        }
         return config_.model_name;
     }
     
@@ -447,15 +688,30 @@ public:
     
     void to(const torch::Device& device) override {
         device_ = device;
-        model_->to(device);
+        if (use_torchscript_ && torchscript_model_) {
+            torchscript_model_->to(device);
+        } else if (model_) {
+            model_->to(device);
+        }
     }
     
     void train() override {
-        model_->train();
+        if (!use_torchscript_ && model_) {
+            model_->train();
+        }
     }
     
     void eval() override {
-        model_->eval();
+        if (!use_torchscript_ && model_) {
+            model_->eval();
+        }
+    }
+    
+    /**
+     * Check if using TorchScript model.
+     */
+    bool usingTorchScript() const {
+        return use_torchscript_;
     }
     
     /**
@@ -487,9 +743,21 @@ public:
 private:
     ModelConfig config_;
     torch::Device device_;
+    bool use_torchscript_;
+    std::string torchscript_path_;
+    
+    // Built-in model components
     torch::nn::Sequential model_{nullptr};
     torch::nn::Sequential backbone_{nullptr};
     torch::nn::Sequential detection_head_{nullptr};
+    
+    // TorchScript model
+    std::shared_ptr<TorchScriptModel> torchscript_model_;
+    
+    void loadTorchScriptModel() {
+        ModelLoader loader;
+        torchscript_model_ = loader.loadTorchScriptModel(torchscript_path_, device_);
+    }
     
     void buildModel() {
         // Simplified backbone (in practice, use ResNet/Darknet)

@@ -127,6 +127,11 @@ add_executable(atomspace_test_nn test_nn.cpp)
 target_link_libraries(atomspace_test_nn ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_nn PROPERTY CXX_STANDARD 17)
 
+# Model Loader test executable (Phase 8)
+add_executable(atomspace_test_model_loader test_model_loader.cpp)
+target_link_libraries(atomspace_test_model_loader ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_model_loader PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
