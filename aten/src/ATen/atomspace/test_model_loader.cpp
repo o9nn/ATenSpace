@@ -235,14 +235,14 @@ void test_atomspace_integration_no_models() {
     
     // Simulate embedding extraction (without real model)
     // In production, embeddings would come from BERT/GPT
-    auto embedding_dim = 768;  // Standard BERT hidden size
+    const int bert_hidden_size = 768;  // Standard BERT hidden size
     
-    cat->setEmbedding(torch::randn({embedding_dim}));
-    dog->setEmbedding(torch::randn({embedding_dim}));
-    animal->setEmbedding(torch::randn({embedding_dim}));
+    cat->setEmbedding(torch::randn({bert_hidden_size}));
+    dog->setEmbedding(torch::randn({bert_hidden_size}));
+    animal->setEmbedding(torch::randn({bert_hidden_size}));
     
     assert(cat->hasEmbedding());
-    assert(cat->getEmbedding().size(0) == embedding_dim);
+    assert(cat->getEmbedding().size(0) == bert_hidden_size);
     std::cout << "✓ Concepts created with simulated BERT embeddings" << std::endl;
     
     // Test semantic similarity
