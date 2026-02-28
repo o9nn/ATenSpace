@@ -680,6 +680,60 @@ make
 
 # Run Vision tests (NEW Phase 5)
 ./atomspace_test_vision
+
+# Run Neural Network tests (Phase 7)
+./atomspace_test_nn
+
+# Run Model Loader tests (NEW Phase 8)
+./atomspace_test_model_loader
+```
+
+### ModelLoader (NEW in Phase 8)
+
+Load real pre-trained models exported from HuggingFace. Features:
+- TorchScript model loading from Python exports
+- Model caching for repeated access
+- Configuration loading from JSON
+- Helper functions for BERT, GPT-2, ViT, YOLO
+
+**Usage**:
+```cpp
+#include <ATen/atomspace/ModelLoader.h>
+
+using namespace at::atomspace::nn;
+
+// Load a BERT model
+ModelLoader loader;
+auto bert = loader.loadTorchScriptModel("models/bert_base.pt");
+auto config = loader.loadModelConfig("models/bert_base_config.json");
+
+// Run inference
+auto input_ids = torch::tensor({101, 2054, 2003, 102}).unsqueeze(0);
+auto attention_mask = torch::ones_like(input_ids);
+
+std::vector<torch::jit::IValue> inputs;
+inputs.push_back(input_ids);
+inputs.push_back(attention_mask);
+
+auto output = bert->forward(inputs);
+auto hidden_states = output.toTuple()->elements()[0].toTensor();
+auto cls_embedding = hidden_states.index({0, 0});
+
+// Integrate with AtomSpace
+auto concept = createConceptNode(space, "my_concept", cls_embedding);
+```
+
+**Pre-trained Models with TorchScript**:
+```cpp
+// Models can be loaded either with built-in weights (testing) or TorchScript (production)
+
+// Built-in mode (random weights for testing)
+ModelConfig config("bert-test", "bert");
+auto bert_test = std::make_shared<BERTModel>(config);
+
+// TorchScript mode (real HuggingFace weights)
+auto bert_real = std::make_shared<BERTModel>("models/bert_base.pt", torch::kCPU);
+bool uses_real_weights = bert_real->usingTorchScript();  // true
 ```
 
 ## Feature Status
@@ -693,11 +747,11 @@ Potential areas for expansion:
 - ~~Cognitive engine integration framework~~ ✅ Implemented (Phase 4)
 - ~~Natural Language Understanding~~ ✅ Implemented (Phase 5)
 - ~~Visual Perception~~ ✅ Implemented (Phase 5)
+- ~~Python bindings~~ ✅ Implemented (Phase 6)
+- ~~Neural Network Integration (ATenNN)~~ ✅ Implemented (Phase 7)
+- ~~Pre-trained Model Loading~~ ✅ Implemented (Phase 8)
 - ~~Persistent storage (serialization)~~ ✅ Implemented
-- Integration with actual transformer models (BERT, GPT, etc.)
-- Integration with actual vision models (YOLO, ViT, etc.)
 - Distributed atomspace support
-- Python bindings
 - Advanced query languages
 - Meta-learning of inference rules
 - Neural-guided inference
