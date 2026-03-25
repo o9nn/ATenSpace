@@ -175,6 +175,8 @@ private:
                     else if (json[pos] == 'n')  { result += '\n'; }
                     else if (json[pos] == 't')  { result += '\t'; }
                     else if (json[pos] == 'r')  { result += '\r'; }
+                    else if (json[pos] == 'b')  { result += '\b'; }
+                    else if (json[pos] == 'f')  { result += '\f'; }
                     else { result += json[pos]; }
                 } else {
                     result += json[pos];
@@ -805,14 +807,16 @@ private:
 
             if (!found_merge) break;
 
-            // Merge the pair at best_idx
+            // Merge the pair at best_idx: emit merged token, skip chars[best_idx+1].
+            // The explicit ++i skips the right half of the pair; the for-loop ++i then
+            // advances to best_idx+2, which is the correct next element.
             std::string merged = chars[best_idx] + chars[best_idx + 1];
             std::vector<std::string> next;
             next.reserve(chars.size() - 1);
             for (std::size_t i = 0; i < chars.size(); ++i) {
                 if (i == best_idx) {
                     next.push_back(merged);
-                    ++i;  // skip chars[best_idx+1]
+                    ++i;  // skip chars[best_idx+1] (right half of merged pair)
                 } else {
                     next.push_back(chars[i]);
                 }
