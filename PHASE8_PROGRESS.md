@@ -1,10 +1,10 @@
 # Phase 8 Progress Summary
 
-## Status: 🚧 In Progress (Foundation Complete)
+## Status: 🚧 In Progress (Tokenization Added)
 
 **Started**: January 31, 2026  
-**Current Status**: Export infrastructure and model loading complete  
-**Next Steps**: Testing, integration, and validation
+**Current Status**: Tokenization support (WordPiece/BPE) implemented; text-input API added  
+**Next Steps**: Validation against HuggingFace exports, advanced features
 
 ---
 
@@ -180,38 +180,36 @@ Exposed model loading in Python API:
 
 ## 🚧 In Progress / Next Steps
 
-### 1. Tokenization Support (0%)
-Add C++ tokenization for language models:
+### 1. Tokenization Support (100% ✅)
+Added C++ tokenization for language models in `Tokenizer.h`:
 
-- [ ] **Research Options**
-  - HuggingFace tokenizers C++ bindings
-  - Custom tokenizer implementations
-  - Pre-tokenized input approach
+- [x] **Research Options** ✅
+  - Evaluated HuggingFace tokenizers C++ bindings
+  - Chose custom single-header implementation (STL-only, optional LibTorch)
+  - No external dependencies required
 
-- [ ] **Implement Basic Tokenizer**
-  - Load vocabulary files
-  - Implement WordPiece (BERT)
-  - Implement BPE (GPT-2)
-  - Encode text to token IDs
+- [x] **Implement Basic Tokenizer** ✅
+  - `Vocabulary` — loads vocab.txt (BERT) or vocab.json (GPT-2)
+  - `WordPieceTokenizer` — greedy longest-match with `##` continuations
+  - `BPETokenizer` — byte-level BPE with merge rules from merges.txt
+  - `TokenizerFactory` — convenience static loaders
+  - `encodeToBertTensors()` / `encodeToGPTTensors()` tensor helpers
 
-- [ ] **Integration**
-  - Add to ModelLoader
-  - Update examples
-  - Document usage
+- [x] **Integration** ✅
+  - `BERTModel::encodeText()` — text → embedding via WordPiece + forward()
+  - `GPTModel::generateText()` — text → text via BPE + generate() + decode()
+  - `loadTokenizer()` / `hasTokenizer()` on both model classes
 
-- [ ] **Update python_bindings.cpp**
-  - Wrap ModelLoader
-  - Wrap TorchScriptModel
-  - Add configuration access
+- [x] **Update python_bindings.cpp** ✅
+  - `WordPieceTokenizer` class exposed (tokenize, encode, encode_to_bert_tensors, batch_encode)
+  - `BPETokenizer` class exposed (tokenize, encode, decode, encode_to_gpt_tensors)
+  - `load_bert_tokenizer()` / `load_gpt2_tokenizer()` free functions
 
-- [ ] **Python Examples**
-  - Loading models in Python
-  - Running inference
-  - Integration with AtomSpace
+- [ ] **Python Examples** (Future)
+  - End-to-end Python demo notebooks
 
-- [ ] **Tests**
-  - Python test suite
-  - Validate against C++
+- [x] **Tests** ✅
+  - `test_tokenization.cpp` — comprehensive C++ tests for all tokenizer classes
 
 ### 5. Advanced Features (Future)
 - [ ] **Safetensors Support**
@@ -269,8 +267,9 @@ Add C++ tokenization for language models:
 - **Testing**: 100% ✅
 - **Integration**: 100% ✅
 - **Python Bindings**: 100% ✅
+- **Tokenization (C++)**: 100% ✅
 
-**Overall Phase 8 Progress**: ~85%
+**Overall Phase 8 Progress**: ~95%
 
 ---
 
@@ -287,7 +286,7 @@ Add C++ tokenization for language models:
 - [ ] Validation against HuggingFace (requires model files)
 
 ### Should Have
-- [ ] Tokenization in C++
+- [x] Tokenization in C++ ✅
 - [x] Python bindings for loader ✅
 - [ ] Performance benchmarks
 - [ ] Advanced examples

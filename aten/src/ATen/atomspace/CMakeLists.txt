@@ -132,6 +132,11 @@ add_executable(atomspace_test_model_loader test_model_loader.cpp)
 target_link_libraries(atomspace_test_model_loader ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_model_loader PROPERTY CXX_STANDARD 17)
 
+# Tokenization test executable (Phase 8)
+add_executable(atomspace_test_tokenization test_tokenization.cpp)
+target_link_libraries(atomspace_test_tokenization ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_tokenization PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
@@ -152,6 +157,7 @@ install(FILES
     ATenNN.h
     PretrainedModels.h
     ModelLoader.h
+    Tokenizer.h
     README.md
     DESTINATION include/ATen/atomspace
 )
