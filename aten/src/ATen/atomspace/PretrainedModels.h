@@ -18,6 +18,7 @@
 
 #include "ATenNN.h"
 #include "ModelLoader.h"
+#include "Tokenizer.h"
 #include <torch/torch.h>
 #include <torch/script.h>
 
@@ -57,6 +58,21 @@ public:
         loadTorchScriptModel();
     }
     
+    /**
+     * Create BERT from a TorchScript model with an integrated tokenizer.
+     * @param model_path     Path to the .pt TorchScript file
+     * @param tokenizer_dir  Directory containing BERT vocab.txt
+     * @param device         Device to load model on
+     */
+    BERTModel(const std::string& model_path,
+              const std::string& tokenizer_dir,
+              torch::Device device = torch::kCPU)
+        : config_(), device_(device), use_torchscript_(true),
+          torchscript_path_(model_path), tokenizer_dir_(tokenizer_dir) {
+        loadTorchScriptModel();
+        tokenizer_ = TokenizerFactory::loadBertTokenizer(tokenizer_dir_);
+    }
+
     Tensor forward(const Tensor& input) override {
         torch::NoGradGuard no_grad;
         
@@ -153,11 +169,46 @@ public:
         return extractor.extract(hidden_states, attention_mask);
     }
     
+    /**
+     * Encode text using the integrated WordPiece tokenizer and run forward().
+     * Requires the tokenizer to have been loaded (use the tokenizer_dir
+     * constructor overload, or call loadTokenizer() first).
+     * @param text        Input text
+     * @param max_length  Maximum sequence length (default 512)
+     * @return            Hidden states [1, seq_len, hidden_size]
+     * @throws std::runtime_error if no tokenizer is loaded
+     */
+    Tensor encodeText(const std::string& text, int max_length = 512) {
+        if (!tokenizer_) {
+            throw std::runtime_error(
+                "BERTModel: no tokenizer loaded. "
+                "Use the (model_path, tokenizer_dir) constructor or call loadTokenizer().");
+        }
+        auto [input_ids, attention_mask, token_type_ids] =
+            tokenizer_->encodeToBertTensors(text, max_length);
+        return forward(input_ids.to(device_));
+    }
+
+    /**
+     * Load (or reload) the WordPiece tokenizer from a directory.
+     * @param tokenizer_dir  Directory containing vocab.txt
+     */
+    void loadTokenizer(const std::string& tokenizer_dir) {
+        tokenizer_dir_ = tokenizer_dir;
+        tokenizer_ = TokenizerFactory::loadBertTokenizer(tokenizer_dir_);
+    }
+
+    /**
+     * Return true if a tokenizer has been loaded.
+     */
+    bool hasTokenizer() const { return tokenizer_ != nullptr; }
+
 private:
     ModelConfig config_;
     torch::Device device_;
     bool use_torchscript_;
     std::string torchscript_path_;
+    std::string tokenizer_dir_;
     
     // Built-in model components
     torch::nn::Sequential model_{nullptr};
@@ -168,6 +219,9 @@ private:
     
     // TorchScript model
     std::shared_ptr<TorchScriptModel> torchscript_model_;
+
+    // Optional integrated tokenizer
+    std::shared_ptr<WordPieceTokenizer> tokenizer_;
     
     void loadTorchScriptModel() {
         ModelLoader loader;
@@ -245,6 +299,21 @@ public:
     GPTModel(const std::string& model_path, torch::Device device = torch::kCPU)
         : config_(), device_(device), use_torchscript_(true), torchscript_path_(model_path) {
         loadTorchScriptModel();
+    }
+    
+    /**
+     * Create GPT from a TorchScript model with an integrated BPE tokenizer.
+     * @param model_path     Path to the .pt TorchScript file
+     * @param tokenizer_dir  Directory containing vocab.json and merges.txt
+     * @param device         Device to load model on
+     */
+    GPTModel(const std::string& model_path,
+             const std::string& tokenizer_dir,
+             torch::Device device = torch::kCPU)
+        : config_(), device_(device), use_torchscript_(true),
+          torchscript_path_(model_path), tokenizer_dir_(tokenizer_dir) {
+        loadTorchScriptModel();
+        tokenizer_ = TokenizerFactory::loadGPT2Tokenizer(tokenizer_dir_);
     }
     
     Tensor forward(const Tensor& input) override {
@@ -346,11 +415,56 @@ public:
         return generated;
     }
     
+    /**
+     * Generate text from a string prompt using the integrated BPE tokenizer.
+     * Encodes the prompt, runs greedy autoregressive generation, then decodes.
+     * @param prompt         Input text
+     * @param max_new_tokens Maximum number of new tokens to generate (default 50)
+     * @return               Generated text (decoded)
+     * @throws std::runtime_error if no tokenizer is loaded
+     */
+    std::string generateText(const std::string& prompt, int max_new_tokens = 50) {
+        if (!tokenizer_) {
+            throw std::runtime_error(
+                "GPTModel: no tokenizer loaded. "
+                "Use the (model_path, tokenizer_dir) constructor or call loadTokenizer().");
+        }
+        auto ids = tokenizer_->encode(prompt);
+        int64_t seq_len = static_cast<int64_t>(ids.size());
+        auto input_ids = torch::zeros({1, seq_len}, torch::kLong);
+        for (int64_t i = 0; i < seq_len; ++i) {
+            input_ids[0][i] = ids[static_cast<std::size_t>(i)];
+        }
+        auto generated = generate(input_ids.to(device_), max_new_tokens);
+        // Decode only the newly generated tokens
+        std::vector<int> gen_ids;
+        int64_t total_len = generated.size(1);
+        for (int64_t i = seq_len; i < total_len; ++i) {
+            gen_ids.push_back(static_cast<int>(generated[0][i].item<int64_t>()));
+        }
+        return tokenizer_->decode(gen_ids);
+    }
+
+    /**
+     * Load (or reload) the BPE tokenizer from a directory.
+     * @param tokenizer_dir  Directory containing vocab.json and merges.txt
+     */
+    void loadTokenizer(const std::string& tokenizer_dir) {
+        tokenizer_dir_ = tokenizer_dir;
+        tokenizer_ = TokenizerFactory::loadGPT2Tokenizer(tokenizer_dir_);
+    }
+
+    /**
+     * Return true if a tokenizer has been loaded.
+     */
+    bool hasTokenizer() const { return tokenizer_ != nullptr; }
+
 private:
     ModelConfig config_;
     torch::Device device_;
     bool use_torchscript_;
     std::string torchscript_path_;
+    std::string tokenizer_dir_;
     
     // Built-in model components
     torch::nn::Sequential model_{nullptr};
@@ -361,6 +475,9 @@ private:
     
     // TorchScript model
     std::shared_ptr<TorchScriptModel> torchscript_model_;
+
+    // Optional integrated tokenizer
+    std::shared_ptr<BPETokenizer> tokenizer_;
     
     void loadTorchScriptModel() {
         ModelLoader loader;

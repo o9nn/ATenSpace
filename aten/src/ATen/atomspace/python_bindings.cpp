@@ -20,6 +20,7 @@
 
 #include "ATenSpace.h"
 #include "ModelLoader.h"
+#include "Tokenizer.h"
 
 namespace py = pybind11;
 using namespace at::atomspace;
@@ -527,6 +528,61 @@ PYBIND11_MODULE(atenspace, m) {
           py::arg("model_path") = "models/vit_base.pt");
     m.def("load_yolo_model", &nn::loadYOLOModel,
           py::arg("model_path") = "models/yolov5.pt");
+
+    // ============================================================
+    // TOKENIZER - Phase 8 (tokenization support)
+    // ============================================================
+
+    py::class_<nn::Vocabulary>(m, "Vocabulary")
+        .def(py::init<>())
+        .def("load_from_txt",  &nn::Vocabulary::loadFromTxt,
+             py::arg("path"))
+        .def("load_from_json", &nn::Vocabulary::loadFromJson,
+             py::arg("path"))
+        .def("token_to_id", &nn::Vocabulary::tokenToId,
+             py::arg("token"), py::arg("unk_id") = 100)
+        .def("id_to_token", &nn::Vocabulary::idToToken,
+             py::arg("id"))
+        .def("size",     &nn::Vocabulary::size)
+        .def("contains", &nn::Vocabulary::contains,
+             py::arg("token"));
+
+    py::class_<nn::WordPieceTokenizer, std::shared_ptr<nn::WordPieceTokenizer>>(
+            m, "WordPieceTokenizer")
+        .def("tokenize", &nn::WordPieceTokenizer::tokenize,
+             py::arg("text"))
+        .def("encode",
+             &nn::WordPieceTokenizer::encode,
+             py::arg("text"),
+             py::arg("max_length")         = 512,
+             py::arg("add_special_tokens") = true)
+        .def("encode_to_bert_tensors",
+             &nn::WordPieceTokenizer::encodeToBertTensors,
+             py::arg("text"), py::arg("max_length") = 512)
+        .def("batch_encode",
+             &nn::WordPieceTokenizer::batchEncode,
+             py::arg("texts"), py::arg("max_length") = 512);
+
+    py::class_<nn::BPETokenizer, std::shared_ptr<nn::BPETokenizer>>(m, "BPETokenizer")
+        .def("tokenize", &nn::BPETokenizer::tokenize,
+             py::arg("text"))
+        .def("encode", &nn::BPETokenizer::encode,
+             py::arg("text"))
+        .def("decode", &nn::BPETokenizer::decode,
+             py::arg("ids"))
+        .def("encode_to_gpt_tensors",
+             &nn::BPETokenizer::encodeToGPTTensors,
+             py::arg("text"), py::arg("max_length") = 1024);
+
+    m.def("load_bert_tokenizer",
+          &nn::TokenizerFactory::loadBertTokenizer,
+          py::arg("dir"),
+          "Load a WordPieceTokenizer (BERT) from a directory containing vocab.txt");
+
+    m.def("load_gpt2_tokenizer",
+          &nn::TokenizerFactory::loadGPT2Tokenizer,
+          py::arg("dir"),
+          "Load a BPETokenizer (GPT-2) from a directory containing vocab.json + merges.txt");
 
     // Module version
     m.attr("__version__") = "0.8.0";
