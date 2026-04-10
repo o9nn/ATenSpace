@@ -1,0 +1,96 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Performance Benchmark (Ubuntu Release)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential ninja-build
+
+      - name: Install PyTorch (CPU)
+        run: |
+          pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Resolve Torch CMake prefix path
+        id: torch-path
+        run: |
+          TORCH_CMAKE=$(python -c "import torch; print(torch.utils.cmake_prefix_path)")
+          echo "cmake_prefix=$TORCH_CMAKE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure CMake
+        run: |
+          cmake -S aten/src/ATen/atomspace \
+                -B build \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH="${{ steps.torch-path.outputs.cmake_prefix }}" \
+                -DBUILD_PYTHON_BINDINGS=OFF
+
+      - name: Build benchmark target
+        run: cmake --build build --config Release --target atomspace_benchmark --parallel
+
+      - name: Run benchmark (200 iterations)
+        run: |
+          ./build/atomspace_benchmark --iterations 200 | tee benchmark_results.txt
+          echo ""
+          echo "Benchmark complete. Results saved to benchmark_results.txt"
+
+      - name: Upload benchmark results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: benchmark_results.txt
+          retention-days: 90
+
+      - name: Comment benchmark summary on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = fs.readFileSync('benchmark_results.txt', 'utf8');
+            const sha = '${{ github.sha }}'.slice(0, 8);
+            const body = [
+              '## 📊 ATenSpace Benchmark Results',
+              '',
+              '```',
+              results.trim(),
+              '```',
+              '',
+              `_Commit: \`${sha}\` — [full results artifact](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})_`
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
