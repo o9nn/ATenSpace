@@ -14,6 +14,7 @@
 #include <chrono>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace at {
 namespace atomspace {
@@ -493,6 +494,281 @@ private:
 };
 
 // ======================================================================== //
+//  Phase 12 helpers (shared by PLNConjunctionStep, PLNDisjunctionStep,      //
+//  and PLNSimilarityStep)                                                    //
+// ======================================================================== //
+
+/// Epsilon used in the PLN similarity denominator to prevent division by zero.
+static constexpr float kPLNSimEps = 1e-6f;
+
+/**
+ * Compute a commutative pair key for two atom hashes.
+ * The key is the same regardless of the order of h0 and h1.
+ */
+inline size_t atomPairKey(size_t h0, size_t h1) noexcept {
+    // Use Fibonacci hashing to reduce collisions; symmetry is preserved by
+    // XOR-ing the two directional products.
+    constexpr size_t kFibMul = 0x9e3779b97f4a7c15ULL;
+    return (h0 ^ (h1 * kFibMul)) ^ (h1 ^ (h0 * kFibMul));
+}
+
+/**
+ * Build a set of existing ordered pair keys from binary links of a given type
+ * that are already present in the working set.
+ */
+inline std::unordered_set<size_t> existingBinaryPairs(
+        const std::vector<Atom::Handle>& workingSet,
+        Atom::Type linkType) {
+    std::unordered_set<size_t> keys;
+    for (const auto& a : workingSet) {
+        if (!a->isLink() || a->getType() != linkType) continue;
+        const Link* l = static_cast<const Link*>(a.get());
+        if (l->getArity() != 2) continue;
+        keys.insert(atomPairKey(l->getOutgoingAtom(0)->getHash(),
+                                l->getOutgoingAtom(1)->getHash()));
+    }
+    return keys;
+}
+
+/**
+ * PLNConjunctionStep - Evaluate AND truth values (Phase 12).
+ *
+ * For each AND_LINK(A, B) in the working set whose truth value has not yet
+ * been computed, derives the conjunction TV from the truth values of A and B
+ * using the PLN formula:
+ *   strength   = sA * sB
+ *   confidence = cA * cB
+ *
+ * The step also creates new AND_LINK atoms for each pair of *non-link* atoms
+ * in the working set whose individual strengths are both ≥ @p minStrength,
+ * unless the pair already has an AND_LINK in the working set.
+ */
+class PLNConjunctionStep : public InferenceStep {
+public:
+    explicit PLNConjunctionStep(float minStrength = 0.5f)
+        : minStrength_(minStrength) {}
+
+    std::string getName() const override { return "PLNConjunction"; }
+
+    bool execute(std::vector<Atom::Handle>& workingSet,
+                 AtomSpace& space) override {
+        size_t before = workingSet.size();
+        bool evaluated = false;
+
+        // Phase A: evaluate existing AND_LINKs whose TV is default (s=1, c=0)
+        for (const auto& a : workingSet) {
+            if (!a->isLink() || a->getType() != Atom::Type::AND_LINK) continue;
+            const Link* l = static_cast<const Link*>(a.get());
+            if (l->getArity() != 2) continue;
+
+            // Only recompute if confidence is still zero (unset)
+            if (TruthValue::getConfidence(a->getTruthValue()) > 0.0f) continue;
+
+            auto lhs = l->getOutgoingAtom(0);
+            auto rhs = l->getOutgoingAtom(1);
+            float cL = TruthValue::getConfidence(lhs->getTruthValue());
+            float cR = TruthValue::getConfidence(rhs->getTruthValue());
+            if (cL <= 0.0f || cR <= 0.0f) continue;
+
+            a->setTruthValue(
+                TruthValue::conjunction(lhs->getTruthValue(),
+                                        rhs->getTruthValue()));
+            evaluated = true;
+        }
+
+        // Phase B: create AND_LINK for pairs of qualifying non-link atoms
+        std::vector<Atom::Handle> candidates;
+        for (const auto& a : workingSet) {
+            if (a->isLink()) continue;
+            if (TruthValue::getStrength(a->getTruthValue()) >= minStrength_)
+                candidates.push_back(a);
+        }
+
+        auto existingPairs = existingBinaryPairs(workingSet, Atom::Type::AND_LINK);
+
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            for (size_t j = i + 1; j < candidates.size(); ++j) {
+                size_t key = atomPairKey(candidates[i]->getHash(),
+                                         candidates[j]->getHash());
+                if (existingPairs.count(key)) continue;
+
+                auto andLink = space.addLink(
+                    Atom::Type::AND_LINK, {candidates[i], candidates[j]});
+                andLink->setTruthValue(
+                    TruthValue::conjunction(candidates[i]->getTruthValue(),
+                                            candidates[j]->getTruthValue()));
+
+                if (std::find(workingSet.begin(), workingSet.end(), andLink) ==
+                        workingSet.end()) {
+                    workingSet.push_back(andLink);
+                }
+                existingPairs.insert(key);
+            }
+        }
+
+        return evaluated || workingSet.size() > before;
+    }
+
+private:
+    float minStrength_;
+};
+
+/**
+ * PLNDisjunctionStep - Evaluate OR truth values (Phase 12).
+ *
+ * For each OR_LINK(A, B) in the working set whose truth value has not yet
+ * been computed, derives the disjunction TV using:
+ *   strength   = sA + sB - sA * sB
+ *   confidence = (cA + cB) / 2
+ *
+ * Also creates OR_LINK atoms for pairs of non-link atoms whose strengths
+ * both exceed @p minStrength when no OR_LINK exists for that pair.
+ */
+class PLNDisjunctionStep : public InferenceStep {
+public:
+    explicit PLNDisjunctionStep(float minStrength = 0.3f)
+        : minStrength_(minStrength) {}
+
+    std::string getName() const override { return "PLNDisjunction"; }
+
+    bool execute(std::vector<Atom::Handle>& workingSet,
+                 AtomSpace& space) override {
+        size_t before = workingSet.size();
+        bool evaluated = false;
+
+        // Phase A: evaluate existing OR_LINKs whose TV is unset
+        for (const auto& a : workingSet) {
+            if (!a->isLink() || a->getType() != Atom::Type::OR_LINK) continue;
+            const Link* l = static_cast<const Link*>(a.get());
+            if (l->getArity() != 2) continue;
+
+            if (TruthValue::getConfidence(a->getTruthValue()) > 0.0f) continue;
+
+            auto lhs = l->getOutgoingAtom(0);
+            auto rhs = l->getOutgoingAtom(1);
+            float cL = TruthValue::getConfidence(lhs->getTruthValue());
+            float cR = TruthValue::getConfidence(rhs->getTruthValue());
+            if (cL <= 0.0f || cR <= 0.0f) continue;
+
+            a->setTruthValue(
+                TruthValue::disjunction(lhs->getTruthValue(),
+                                        rhs->getTruthValue()));
+            evaluated = true;
+        }
+
+        // Phase B: create OR_LINK for pairs of qualifying atoms
+        std::vector<Atom::Handle> candidates;
+        for (const auto& a : workingSet) {
+            if (a->isLink()) continue;
+            if (TruthValue::getStrength(a->getTruthValue()) >= minStrength_)
+                candidates.push_back(a);
+        }
+
+        auto existingPairs = existingBinaryPairs(workingSet, Atom::Type::OR_LINK);
+
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            for (size_t j = i + 1; j < candidates.size(); ++j) {
+                size_t key = atomPairKey(candidates[i]->getHash(),
+                                         candidates[j]->getHash());
+                if (existingPairs.count(key)) continue;
+
+                auto orLink = space.addLink(
+                    Atom::Type::OR_LINK, {candidates[i], candidates[j]});
+                orLink->setTruthValue(
+                    TruthValue::disjunction(candidates[i]->getTruthValue(),
+                                             candidates[j]->getTruthValue()));
+
+                if (std::find(workingSet.begin(), workingSet.end(), orLink) ==
+                        workingSet.end()) {
+                    workingSet.push_back(orLink);
+                }
+                existingPairs.insert(key);
+            }
+        }
+
+        return evaluated || workingSet.size() > before;
+    }
+
+private:
+    float minStrength_;
+};
+
+/**
+ * PLNSimilarityStep - Compute similarity links (Phase 12).
+ *
+ * For each pair of atoms in the working set that share the same type and both
+ * have confidence > 0, computes the PLN similarity:
+ *
+ *   s(A,B) = (sA * sB) / (sA + sB - sA * sB + ε)
+ *
+ * and creates a SIMILARITY_LINK(A, B) with that TV whenever the similarity
+ * strength exceeds @p minSimilarity.  The confidence of the link is the
+ * minimum of cA and cB (limited evidence principle).
+ *
+ * Already-existing SIMILARITY_LINKs for a pair are skipped.
+ */
+class PLNSimilarityStep : public InferenceStep {
+public:
+    explicit PLNSimilarityStep(float minSimilarity = 0.5f)
+        : minSimilarity_(minSimilarity) {}
+
+    std::string getName() const override { return "PLNSimilarity"; }
+
+    bool execute(std::vector<Atom::Handle>& workingSet,
+                 AtomSpace& space) override {
+        size_t before = workingSet.size();
+
+        // Collect atoms that have usable truth values (confidence > 0)
+        std::vector<Atom::Handle> eligible;
+        for (const auto& a : workingSet) {
+            if (TruthValue::getConfidence(a->getTruthValue()) > 0.0f)
+                eligible.push_back(a);
+        }
+
+        // Track existing SIMILARITY_LINK pairs
+        auto existingPairs = existingBinaryPairs(workingSet,
+                                                  Atom::Type::SIMILARITY_LINK);
+
+        for (size_t i = 0; i < eligible.size(); ++i) {
+            for (size_t j = i + 1; j < eligible.size(); ++j) {
+                // Only pair atoms of the same type
+                if (eligible[i]->getType() != eligible[j]->getType()) continue;
+
+                size_t key = atomPairKey(eligible[i]->getHash(),
+                                          eligible[j]->getHash());
+                if (existingPairs.count(key)) continue;
+
+                float sA = TruthValue::getStrength(eligible[i]->getTruthValue());
+                float sB = TruthValue::getStrength(eligible[j]->getTruthValue());
+                float cA = TruthValue::getConfidence(eligible[i]->getTruthValue());
+                float cB = TruthValue::getConfidence(eligible[j]->getTruthValue());
+
+                float denom = sA + sB - sA * sB + kPLNSimEps;
+                float simStrength = (sA * sB) / denom;
+                float simConf = std::min(cA, cB);
+
+                if (simStrength < minSimilarity_) continue;
+
+                auto simLink = space.addLink(
+                    Atom::Type::SIMILARITY_LINK, {eligible[i], eligible[j]});
+                simLink->setTruthValue(TruthValue::create(simStrength, simConf));
+
+                if (std::find(workingSet.begin(), workingSet.end(), simLink) ==
+                        workingSet.end()) {
+                    workingSet.push_back(simLink);
+                }
+                existingPairs.insert(key);
+            }
+        }
+
+        return workingSet.size() > before;
+    }
+
+private:
+    float minSimilarity_;
+};
+
+// ======================================================================== //
 //  Pipeline execution context and result                                     //
 // ======================================================================== //
 
@@ -627,6 +903,21 @@ public:
         return addStep(std::make_shared<PLNInductionStep>(linkType));
     }
 
+    /** Append a PLN conjunction step (Phase 12) */
+    InferencePipeline& plnConjunction(float minStrength = 0.5f) {
+        return addStep(std::make_shared<PLNConjunctionStep>(minStrength));
+    }
+
+    /** Append a PLN disjunction step (Phase 12) */
+    InferencePipeline& plnDisjunction(float minStrength = 0.3f) {
+        return addStep(std::make_shared<PLNDisjunctionStep>(minStrength));
+    }
+
+    /** Append a PLN similarity step (Phase 12) */
+    InferencePipeline& plnSimilarity(float minSimilarity = 0.5f) {
+        return addStep(std::make_shared<PLNSimilarityStep>(minSimilarity));
+    }
+
     // ------------------------------------------------------------------ //
     //  Execution
     // ------------------------------------------------------------------ //
@@ -707,6 +998,14 @@ public:
         return names;
     }
 
+    /**
+     * Remove all steps from the pipeline.
+     */
+    InferencePipeline& clear() {
+        steps_.clear();
+        return *this;
+    }
+
 private:
     AtomSpace& space_;
     std::vector<std::shared_ptr<InferenceStep>> steps_;
@@ -765,6 +1064,32 @@ inline InferencePipeline makePLNReasoningPipeline(
 
     InferencePipeline p(space);
     p.plnDeduction(minConfidence)
+     .plnRevision()
+     .filterByTV(tvThreshold, minConfidence);
+    return p;
+}
+
+/**
+ * Create a full PLN pipeline (Phase 12):
+ *   1. PLN deduction         — derive transitive implications A→C
+ *   2. PLN conjunction       — AND-combinations of high-strength atoms
+ *   3. PLN disjunction       — OR-combinations of qualifying atoms
+ *   4. PLN similarity        — SIMILARITY_LINKs between cognate atoms
+ *   5. PLN revision          — merge duplicate truth values
+ *   6. Truth-value threshold — discard atoms below the minimum
+ */
+inline InferencePipeline makePLNFullPipeline(
+        AtomSpace& space,
+        float tvThreshold   = 0.0f,
+        float minConfidence = 0.0f,
+        float minStrength   = 0.3f,
+        float minSimilarity = 0.5f) {
+
+    InferencePipeline p(space);
+    p.plnDeduction(minConfidence)
+     .plnConjunction(minStrength)
+     .plnDisjunction(minStrength)
+     .plnSimilarity(minSimilarity)
      .plnRevision()
      .filterByTV(tvThreshold, minConfidence);
     return p;

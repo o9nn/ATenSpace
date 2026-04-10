@@ -228,6 +228,109 @@ PYBIND11_MODULE(atenspace, m) {
             return keys;
         });
 
+    // VariableBinding: typed wrapper around unordered_map<Atom::Handle, Atom::Handle>
+    // Keys are VariableNode atoms; values are the atoms they are bound to.
+    // Python access is by variable name string OR by Atom handle.
+    py::class_<VariableBinding>(m, "VariableBinding",
+        "Typed mapping from VariableNode atoms to their bound atoms.\n\n"
+        "Supports lookup by variable name (string) as well as by Atom handle.")
+        .def(py::init<>())
+        .def("__len__", [](const VariableBinding& vb) {
+            return vb.size();
+        })
+        .def("__contains__",
+             [](const VariableBinding& vb, const Atom::Handle& var) {
+                 return vb.find(var) != vb.end();
+             }, py::arg("var"),
+             "Return True if the variable atom is bound.")
+        .def("get",
+             [](const VariableBinding& vb,
+                const Atom::Handle& var,
+                py::object default_) -> py::object {
+                 auto it = vb.find(var);
+                 if (it == vb.end()) return default_;
+                 return py::cast(it->second);
+             }, py::arg("var"), py::arg("default") = py::none(),
+             "Return the binding for var, or default if not found.")
+        .def("__getitem__",
+             [](const VariableBinding& vb, const Atom::Handle& var) {
+                 auto it = vb.find(var);
+                 if (it == vb.end())
+                     throw py::key_error("Variable not bound.");
+                 return it->second;
+             }, py::arg("var"),
+             "Return the bound atom for a VariableNode key.")
+        .def("get_by_name",
+             [](const VariableBinding& vb, const std::string& name) -> py::object {
+                 for (const auto& kv : vb) {
+                     if (!kv.first->isNode()) continue;
+                     const Node* n = static_cast<const Node*>(kv.first.get());
+                     if (n->getName() == name)
+                         return py::cast(kv.second);
+                 }
+                 return py::none();
+             }, py::arg("name"),
+             "Look up a binding by variable name string (e.g. '?X').")
+        .def("keys",
+             [](const VariableBinding& vb) {
+                 std::vector<Atom::Handle> keys;
+                 keys.reserve(vb.size());
+                 for (const auto& kv : vb) keys.push_back(kv.first);
+                 return keys;
+             }, "Return a list of bound VariableNode atoms.")
+        .def("values",
+             [](const VariableBinding& vb) {
+                 std::vector<Atom::Handle> vals;
+                 vals.reserve(vb.size());
+                 for (const auto& kv : vb) vals.push_back(kv.second);
+                 return vals;
+             }, "Return a list of atoms that variables are bound to.")
+        .def("items",
+             [](const VariableBinding& vb) {
+                 std::vector<std::pair<Atom::Handle, Atom::Handle>> items;
+                 items.reserve(vb.size());
+                 for (const auto& kv : vb) items.emplace_back(kv.first, kv.second);
+                 return items;
+             }, "Return a list of (variable_atom, bound_atom) pairs.")
+        .def("variable_names",
+             [](const VariableBinding& vb) {
+                 std::vector<std::string> names;
+                 for (const auto& kv : vb) {
+                     if (!kv.first->isNode()) continue;
+                     const Node* n = static_cast<const Node*>(kv.first.get());
+                     names.push_back(n->getName());
+                 }
+                 return names;
+             }, "Return the names of all bound variables.")
+        .def("to_dict",
+             [](const VariableBinding& vb) {
+                 py::dict d;
+                 for (const auto& kv : vb) {
+                     if (!kv.first->isNode()) continue;
+                     const Node* n = static_cast<const Node*>(kv.first.get());
+                     d[py::str(n->getName())] = kv.second;
+                 }
+                 return d;
+             }, "Convert to a plain Python dict mapping variable names to atoms.")
+        .def("__repr__",
+             [](const VariableBinding& vb) {
+                 std::string s = "VariableBinding({";
+                 bool first = true;
+                 for (const auto& kv : vb) {
+                     if (!first) s += ", ";
+                     first = false;
+                     std::string varName = kv.first->isNode()
+                         ? static_cast<const Node*>(kv.first.get())->getName()
+                         : "<link>";
+                     std::string valName = kv.second->isNode()
+                         ? static_cast<const Node*>(kv.second.get())->getName()
+                         : "<link>";
+                     s += varName + " -> " + valName;
+                 }
+                 s += "})";
+                 return s;
+             });
+
     py::class_<PatternMatcher>(m, "PatternMatcher",
         "Static-method class for pattern matching and unification.")
         // match(pattern, target) → bool
@@ -659,7 +762,7 @@ PYBIND11_MODULE(atenspace, m) {
           "Load a BPETokenizer (GPT-2) from a directory containing vocab.json + merges.txt");
 
     // Module version
-    m.attr("__version__") = "0.11.0";
+    m.attr("__version__") = "0.12.0";
 
     // ============================================================
     // PHASE 9 + 10 BINDINGS
@@ -902,6 +1005,25 @@ PYBIND11_MODULE(atenspace, m) {
         .def(py::init<Atom::Type>(),
              py::arg("link_type") = Atom::Type::INHERITANCE_LINK);
 
+    // Phase 12 PLN steps
+    py::class_<PLNConjunctionStep, InferenceStep,
+               std::shared_ptr<PLNConjunctionStep>>(m, "PLNConjunctionStep",
+        "Compute AND_LINK truth values using the PLN conjunction formula.")
+        .def(py::init<float>(),
+             py::arg("min_strength") = 0.5f);
+
+    py::class_<PLNDisjunctionStep, InferenceStep,
+               std::shared_ptr<PLNDisjunctionStep>>(m, "PLNDisjunctionStep",
+        "Compute OR_LINK truth values using the PLN disjunction formula.")
+        .def(py::init<float>(),
+             py::arg("min_strength") = 0.3f);
+
+    py::class_<PLNSimilarityStep, InferenceStep,
+               std::shared_ptr<PLNSimilarityStep>>(m, "PLNSimilarityStep",
+        "Create SIMILARITY_LINK atoms for cognate atoms above a similarity threshold.")
+        .def(py::init<float>(),
+             py::arg("min_similarity") = 0.5f);
+
     py::class_<InferencePipeline>(m, "InferencePipeline",
         "Composable, ordered sequence of inference steps.")
         .def(py::init<AtomSpace&>(), py::arg("space"))
@@ -974,7 +1096,26 @@ PYBIND11_MODULE(atenspace, m) {
                  return p.plnInduction(lt);
              }, py::arg("link_type") = Atom::Type::INHERITANCE_LINK,
              py::return_value_policy::reference,
-             "Append a PLNInductionStep.");
+             "Append a PLNInductionStep.")
+        // PLN step shortcuts (Phase 12)
+        .def("pln_conjunction",
+             [](InferencePipeline& p, float minS) -> InferencePipeline& {
+                 return p.plnConjunction(minS);
+             }, py::arg("min_strength") = 0.5f,
+             py::return_value_policy::reference,
+             "Append a PLNConjunctionStep.")
+        .def("pln_disjunction",
+             [](InferencePipeline& p, float minS) -> InferencePipeline& {
+                 return p.plnDisjunction(minS);
+             }, py::arg("min_strength") = 0.3f,
+             py::return_value_policy::reference,
+             "Append a PLNDisjunctionStep.")
+        .def("pln_similarity",
+             [](InferencePipeline& p, float minSim) -> InferencePipeline& {
+                 return p.plnSimilarity(minSim);
+             }, py::arg("min_similarity") = 0.5f,
+             py::return_value_policy::reference,
+             "Append a PLNSimilarityStep.");
 
     m.def("make_forward_reasoning_pipeline",
           &makeForwardReasoningPipeline,
@@ -994,6 +1135,15 @@ PYBIND11_MODULE(atenspace, m) {
           py::arg("tv_threshold") = 0.0f,
           py::arg("min_confidence") = 0.0f,
           "Create a PLN reasoning pipeline (deduction → revision → filter).");
+
+    m.def("make_pln_full_pipeline",
+          &makePLNFullPipeline,
+          py::arg("space"),
+          py::arg("tv_threshold")    = 0.0f,
+          py::arg("min_confidence")  = 0.0f,
+          py::arg("min_strength")    = 0.3f,
+          py::arg("min_similarity")  = 0.5f,
+          "Create a full PLN pipeline (deduction→conjunction→disjunction→similarity→revision→filter).");
 
     // ---- HebbianLearner ----------------------------------------
 

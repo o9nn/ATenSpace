@@ -190,6 +190,11 @@ add_executable(atomspace_test_phase11 test_phase11.cpp)
 target_link_libraries(atomspace_test_phase11 ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_phase11 PROPERTY CXX_STANDARD 17)
 
+# PLN completeness + negation test (Phase 12)
+add_executable(atomspace_test_phase12 test_phase12.cpp)
+target_link_libraries(atomspace_test_phase12 ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_phase12 PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
