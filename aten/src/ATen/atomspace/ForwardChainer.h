@@ -310,20 +310,24 @@ private:
      */
     int performIteration(AttentionBank* attentionBank, Atom::Handle target = nullptr) {
         int newAtoms = 0;
-        size_t initialSize = space_.getSize();
+        size_t initialSize = space_.size();
         
         // Get all atoms, optionally sorted by attention
         std::vector<Atom::Handle> atoms;
         if (attentionBank) {
             atoms = attentionBank->getAttentionalFocus();
-            // Also include some random atoms
-            const auto& allAtoms = space_.getAllAtoms();
-            size_t sampleSize = std::min(size_t(50), allAtoms.size());
-            for (size_t i = 0; i < sampleSize && atoms.size() < 100; ++i) {
-                atoms.push_back(allAtoms[i]);
+            // Also include some additional atoms
+            auto atomSet = space_.getAtoms();
+            size_t sampleSize = std::min(size_t(50), atomSet.size());
+            size_t count = 0;
+            for (const auto& a : atomSet) {
+                if (count >= sampleSize || atoms.size() >= 100) break;
+                atoms.push_back(a);
+                ++count;
             }
         } else {
-            atoms = space_.getAllAtoms();
+            auto atomSet = space_.getAtoms();
+            atoms.assign(atomSet.begin(), atomSet.end());
         }
         
         // Try to apply rules to pairs of atoms
@@ -336,7 +340,7 @@ private:
             }
         }
         
-        return space_.getSize() - initialSize;
+        return space_.size() - initialSize;
     }
     
     AtomSpace& space_;

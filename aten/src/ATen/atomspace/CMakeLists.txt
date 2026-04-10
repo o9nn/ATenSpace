@@ -137,6 +137,36 @@ add_executable(atomspace_test_tokenization test_tokenization.cpp)
 target_link_libraries(atomspace_test_tokenization ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_tokenization PROPERTY CXX_STANDARD 17)
 
+# ============================================================
+# Phase 9: QueryEngine, BinarySerializer, InferencePipeline,
+#          HebbianLearner
+# ============================================================
+
+# Phase 9 example (all four features)
+add_executable(atomspace_example_phase9 example_phase9.cpp)
+target_link_libraries(atomspace_example_phase9 ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_example_phase9 PROPERTY CXX_STANDARD 17)
+
+# QueryEngine test executable (Phase 9)
+add_executable(atomspace_test_query_engine test_query_engine.cpp)
+target_link_libraries(atomspace_test_query_engine ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_query_engine PROPERTY CXX_STANDARD 17)
+
+# BinarySerializer test executable (Phase 9)
+add_executable(atomspace_test_binary_serializer test_binary_serializer.cpp)
+target_link_libraries(atomspace_test_binary_serializer ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_binary_serializer PROPERTY CXX_STANDARD 17)
+
+# InferencePipeline test executable (Phase 9)
+add_executable(atomspace_test_inference_pipeline test_inference_pipeline.cpp)
+target_link_libraries(atomspace_test_inference_pipeline ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_inference_pipeline PROPERTY CXX_STANDARD 17)
+
+# HebbianLearner test executable (Phase 9)
+add_executable(atomspace_test_hebbian_learner test_hebbian_learner.cpp)
+target_link_libraries(atomspace_test_hebbian_learner ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_hebbian_learner PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
@@ -158,6 +188,11 @@ install(FILES
     PretrainedModels.h
     ModelLoader.h
     Tokenizer.h
+    QueryEngine.h
+    BinarySerializer.h
+    InferencePipeline.h
+    HebbianLearner.h
+    ATenSpaceCore.h
     README.md
     DESTINATION include/ATen/atomspace
 )

@@ -249,7 +249,7 @@ private:
         
         // If pattern is a variable, return all atoms
         if (isVariable(pattern)) {
-            const auto& allAtoms = space.getAllAtoms();
+            const auto& allAtoms = space.getAtoms();
             candidates.insert(candidates.end(), allAtoms.begin(), allAtoms.end());
             return candidates;
         }

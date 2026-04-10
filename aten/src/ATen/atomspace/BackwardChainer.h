@@ -201,7 +201,7 @@ private:
      * Find direct match in atomspace
      */
     Atom::Handle findDirectMatch(const Atom::Handle& goal) {
-        const auto& allAtoms = space_.getAllAtoms();
+        const auto& allAtoms = space_.getAtoms();
         
         for (const auto& atom : allAtoms) {
             if (atom->equals(*goal)) {
@@ -301,15 +301,39 @@ private:
                 auto C = goalLink->getOutgoingAtom(1);
                 
                 // Find all possible middle terms B
-                const auto& allAtoms = space_.getAllAtoms();
+                const auto& allAtoms = space_.getAtoms();
                 for (const auto& B : allAtoms) {
-                    // Look for A→B
-                    auto AB = space_.getLink(goal->getType(), {A, B});
+                    // Look for A→B via A's incoming set
+                    Atom::Handle AB = nullptr;
+                    for (const auto& weakIn : A->getIncomingSet()) {
+                        auto lnk = weakIn.lock();
+                        if (lnk && lnk->getType() == goal->getType() && lnk->isLink()) {
+                            const Link* l = static_cast<const Link*>(lnk.get());
+                            if (l->getArity() == 2 &&
+                                l->getOutgoingAtom(0) == A &&
+                                l->getOutgoingAtom(1) == B) {
+                                AB = lnk;
+                                break;
+                            }
+                        }
+                    }
                     if (AB) {
-                        // Look for B→C
-                        auto BC = space_.getLink(goal->getType(), {B, C});
+                        // Look for B→C via B's incoming set
+                        Atom::Handle BC = nullptr;
+                        for (const auto& weakIn : B->getIncomingSet()) {
+                            auto lnk = weakIn.lock();
+                            if (lnk && lnk->getType() == goal->getType() && lnk->isLink()) {
+                                const Link* l = static_cast<const Link*>(lnk.get());
+                                if (l->getArity() == 2 &&
+                                    l->getOutgoingAtom(0) == B &&
+                                    l->getOutgoingAtom(1) == C) {
+                                    BC = lnk;
+                                    break;
+                                }
+                            }
+                        }
                         if (BC) {
-                            results.push_back({AB, BC});
+                            results.push_back(std::vector<Atom::Handle>{AB, BC});
                         }
                     }
                 }
