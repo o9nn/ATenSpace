@@ -68,5 +68,24 @@ inline Atom::Handle createSimilarityLink(AtomSpace& space,
     return space.addLink(Atom::Type::SIMILARITY_LINK, {a, b});
 }
 
+inline Atom::Handle createVariableNode(AtomSpace& space,
+                                       const std::string& name) {
+    return space.addNode(Atom::Type::VARIABLE_NODE, name);
+}
+
+// Phase 10: type-constrained variable — only binds to atoms of 'constraintTypeName'
+inline Atom::Handle createTypedVariableNode(AtomSpace& space,
+                                            const std::string& varName,
+                                            const std::string& constraintTypeName) {
+    return space.addNode(Atom::Type::TYPED_VARIABLE_NODE,
+                         varName + ":" + constraintTypeName);
+}
+
+// Phase 10: sequence wildcard inside link outgoing sets
+inline Atom::Handle createGlobNode(AtomSpace& space,
+                                   const std::string& name = "@") {
+    return space.addNode(Atom::Type::GLOB_NODE, name);
+}
+
 } // namespace atomspace
 } // namespace at

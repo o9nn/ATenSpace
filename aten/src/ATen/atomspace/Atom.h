@@ -56,7 +56,10 @@ public:
         HEBBIAN_LINK,
         SYMMETRIC_HEBBIAN_LINK,
         ASYMMETRIC_HEBBIAN_LINK,
-        INVERSE_HEBBIAN_LINK
+        INVERSE_HEBBIAN_LINK,
+        // Phase 10: extended pattern-matching atoms
+        TYPED_VARIABLE_NODE,  ///< Variable constrained to a specific atom type
+        GLOB_NODE             ///< Wildcard that matches zero or more atoms in a sequence
     };
     
     virtual ~Atom() = default;
@@ -130,6 +133,8 @@ public:
             case Type::CONCEPT_NODE: return "ConceptNode";
             case Type::PREDICATE_NODE: return "PredicateNode";
             case Type::VARIABLE_NODE: return "VariableNode";
+            case Type::TYPED_VARIABLE_NODE: return "TypedVariableNode";
+            case Type::GLOB_NODE: return "GlobNode";
             default: return "Node";
         }
     }

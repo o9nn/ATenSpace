@@ -167,6 +167,20 @@ add_executable(atomspace_test_hebbian_learner test_hebbian_learner.cpp)
 target_link_libraries(atomspace_test_hebbian_learner ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_hebbian_learner PROPERTY CXX_STANDARD 17)
 
+# ============================================================
+# Phase 10: Benchmark suite, typed-variable tests
+# ============================================================
+
+# Benchmark suite (Phase 10)
+add_executable(atomspace_benchmark benchmark.cpp)
+target_link_libraries(atomspace_benchmark ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_benchmark PROPERTY CXX_STANDARD 17)
+
+# Pattern-matching improvements test (Phase 10)
+add_executable(atomspace_test_phase10 test_phase10.cpp)
+target_link_libraries(atomspace_test_phase10 ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_phase10 PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
