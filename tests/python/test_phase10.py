@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ATenSpace Python Bindings - Phase 9 & 10 Tests
+ATenSpace Python Bindings - Phase 10 Tests (covering Phase 9 bindings)
 
 Tests for:
   - QueryEngine and QueryBuilder

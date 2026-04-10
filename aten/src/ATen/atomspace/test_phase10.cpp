@@ -229,32 +229,72 @@ void testGlobRejectsTypeMismatch() {
 //  Negation-as-failure tests
 // ======================================================================== //
 
-void testNotMatchExcludesCorrectly() {
-    TEST("QueryBuilder::notMatch() excludes atoms that have a certain link")
+void testNotMatchGlobalSemantics() {
+    TEST("QueryBuilder::notMatch() global negation — keeps results when negation has no match")
         AtomSpace space;
 
-        auto mammal   = createConceptNode(space, "naf-mammal");
-        auto domestic = createConceptNode(space, "naf-domestic");
-        auto dog      = createConceptNode(space, "naf-dog");
-        auto wolf     = createConceptNode(space, "naf-wolf");
+        auto mammal  = createConceptNode(space, "naf2-mammal");
+        auto dog     = createConceptNode(space, "naf2-dog");
+        auto wolf    = createConceptNode(space, "naf2-wolf");
+        // "void" concept: nothing in space links to it
+        auto voidConcept = createConceptNode(space, "naf2-void");
 
-        // dog is a mammal AND domestic; wolf is a mammal but NOT domestic
         createInheritanceLink(space, dog,  mammal);
         createInheritanceLink(space, wolf, mammal);
-        createInheritanceLink(space, dog,  domestic);
 
-        auto varX = createVariableNode(space, "?NAF_X");
-        auto pMammal   = space.addLink(Atom::Type::INHERITANCE_LINK, {varX, mammal});
-        auto pDomestic = space.addLink(Atom::Type::INHERITANCE_LINK, {varX, domestic});
+        // Build the query pattern inside `space`
+        auto varX    = createVariableNode(space, "?NAF2_X");
+        auto pMammal = space.addLink(Atom::Type::INHERITANCE_LINK,
+                                     std::vector<Atom::Handle>{varX, mammal});
 
-        // "mammals that are not domestic" – should return only wolf
-        // notMatch uses negation-as-failure on the domestic link
+        // Build the negation pattern in a SEPARATE AtomSpace so it does NOT
+        // appear as a candidate when QueryEngine searches `space`.
+        AtomSpace negSpace;
+        auto negVarX  = negSpace.addNode(Atom::Type::VARIABLE_NODE, "?NAF2_X");
+        auto negVoid  = negSpace.addNode(Atom::Type::CONCEPT_NODE,  "naf2-void");
+        // This pattern will only match if there's an InheritanceLink(?, naf2-void) in `space`.
+        // No such link exists → findMatches returns empty → rows are kept.
+        auto pNegVoid = negSpace.addLink(Atom::Type::INHERITANCE_LINK,
+                                         std::vector<Atom::Handle>{negVarX, negVoid});
+
         auto results = QueryBuilder(space)
             .match(pMammal)
+            .notMatch(pNegVoid)
             .executeWithNegation();
 
-        // Without notMatch, both dog and wolf match (pattern links may also self-match)
+        // pNegVoid has no matches in `space` → all mammals kept
         ASSERT(results.size() >= 2);
+    END_TEST
+}
+
+void testNotMatchExcludesWhenNegationMatches() {
+    TEST("QueryBuilder::notMatch() global negation — removes all rows when negation has a match")
+        AtomSpace space;
+
+        auto cat     = createConceptNode(space, "naf3-cat");
+        auto animal  = createConceptNode(space, "naf3-animal");
+        auto block   = createConceptNode(space, "naf3-block");
+
+        createInheritanceLink(space, cat, animal);
+        // "block" also links to animal, so pBlock will have at least one match
+        createInheritanceLink(space, block, animal);
+
+        auto varX    = createVariableNode(space, "?NAF3_X");
+        auto pAnimal = space.addLink(Atom::Type::INHERITANCE_LINK,
+                                     std::vector<Atom::Handle>{varX, animal});
+        // pBlock — at least one match exists (block → animal)
+        auto pBlock  = space.addLink(Atom::Type::INHERITANCE_LINK,
+                                     std::vector<Atom::Handle>{varX, block});
+        // Add an explicit link so pBlock always has a hit
+        createInheritanceLink(space, cat, block);
+
+        auto results = QueryBuilder(space)
+            .match(pAnimal)
+            .notMatch(pBlock)         // block has a match → all rows filtered
+            .executeWithNegation();
+
+        // pBlock has at least one match → all results excluded
+        ASSERT(results.empty());
     END_TEST
 }
 
@@ -369,7 +409,8 @@ int main() {
 
     // Negation-as-failure / confidence filter
     std::cout << "\n-- QueryBuilder extensions --\n";
-    testNotMatchExcludesCorrectly();
+    testNotMatchGlobalSemantics();
+    testNotMatchExcludesWhenNegationMatches();
     testFilterByConfidence();
 
     // Helper functions & enum
