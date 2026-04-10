@@ -60,6 +60,20 @@ public:
             return bindVariable(pattern, target, bindings);
         }
 
+        // Negation-as-failure: NOT_LINK wraps one inner pattern; the outer
+        // match succeeds iff the inner pattern does NOT match the target.
+        if (pattern->isLink() &&
+                pattern->getType() == Atom::Type::NOT_LINK) {
+            const Link* notLink = static_cast<const Link*>(pattern.get());
+            if (notLink->getArity() == 1) {
+                VariableBinding innerBindings = bindings; // tentative copy
+                bool innerMatched = match(notLink->getOutgoingAtom(0),
+                                          target, innerBindings);
+                // Negation succeeds when inner fails; no new bindings added.
+                return !innerMatched;
+            }
+        }
+
         // Check type compatibility for concrete patterns
         if (pattern->getType() != target->getType()) {
             return false;
