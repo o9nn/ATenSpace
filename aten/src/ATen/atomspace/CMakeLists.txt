@@ -5,6 +5,10 @@ cmake_minimum_required(VERSION 3.5)
 find_package(Torch REQUIRED)
 
 # Include directories
+# ${CMAKE_CURRENT_SOURCE_DIR} is aten/src/ATen/atomspace.
+# Going two levels up gives aten/src, which lets sources use
+# #include <ATen/atomspace/...> as an angle-bracket path.
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../..)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${TORCH_INCLUDE_DIRS})
 
