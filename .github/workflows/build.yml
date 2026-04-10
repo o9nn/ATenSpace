@@ -1,0 +1,135 @@
+name: Build CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cpp-build:
+    name: C++ Build (${{ matrix.os }}, ${{ matrix.build_type }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        build_type: [Release, Debug]
+        exclude:
+          # Reduce macOS CI time — only Release on macOS
+          - os: macos-latest
+            build_type: Debug
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential ninja-build \
+            libeigen3-dev libopenblas-dev
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja
+
+      - name: Install PyTorch (CPU)
+        run: |
+          pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Resolve Torch CMake prefix path
+        id: torch-path
+        run: |
+          TORCH_CMAKE=$(python -c "import torch; print(torch.utils.cmake_prefix_path)")
+          echo "cmake_prefix=$TORCH_CMAKE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure CMake
+        run: |
+          cmake -S aten/src/ATen/atomspace \
+                -B build \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DCMAKE_PREFIX_PATH="${{ steps.torch-path.outputs.cmake_prefix }}" \
+                -DBUILD_PYTHON_BINDINGS=OFF
+
+      - name: Build all targets
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      - name: Verify key binaries exist
+        run: |
+          for bin in \
+            atomspace_test \
+            atomspace_test_advanced \
+            atomspace_test_pln \
+            atomspace_test_ecan \
+            atomspace_test_ecan_minimal \
+            atomspace_test_cognitive \
+            atomspace_test_nlu \
+            atomspace_test_vision \
+            atomspace_test_nn \
+            atomspace_test_model_loader \
+            atomspace_test_tokenization; do
+            echo "Checking $bin..."
+            test -f "build/$bin" || { echo "MISSING: $bin"; exit 1; }
+          done
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Release'
+        with:
+          name: atomspace-binaries-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            build/atomspace_test*
+            build/atomspace_example*
+          retention-days: 7
+
+  python-build:
+    name: Python Package Build (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential ninja-build
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install pybind11 numpy wheel setuptools
+
+      - name: Build atenspace package (Python bindings)
+        run: pip install -e . --no-build-isolation -v
+
+      - name: Verify package import
+        run: python -c "import atenspace; print('atenspace imported successfully')"
