@@ -256,6 +256,243 @@ private:
 };
 
 // ======================================================================== //
+//  PLN inference steps (Phase 11)                                           //
+// ======================================================================== //
+
+/**
+ * PLNDeductionStep - Apply the PLN deduction rule to link pairs in the
+ * working set.
+ *
+ * For every pair of arity-2 InheritanceLink / ImplicationLink atoms
+ * (A→B) and (B→C), creates a new link (A→C) with a deduced truth value
+ * and inserts it into both the AtomSpace and the working set.
+ */
+class PLNDeductionStep : public InferenceStep {
+public:
+    explicit PLNDeductionStep(float minConfidence = 0.0f)
+        : minConfidence_(minConfidence) {}
+
+    std::string getName() const override { return "PLNDeduction"; }
+
+    bool execute(std::vector<Atom::Handle>& workingSet,
+                 AtomSpace& space) override {
+        // Collect arity-2 implication-like links
+        std::vector<Atom::Handle> candidates;
+        for (const auto& a : workingSet) {
+            if (a->isLink() &&
+                (a->getType() == Atom::Type::INHERITANCE_LINK ||
+                 a->getType() == Atom::Type::IMPLICATION_LINK)) {
+                const Link* l = static_cast<const Link*>(a.get());
+                if (l->getArity() == 2) candidates.push_back(a);
+            }
+        }
+
+        DeductionRule rule;
+        size_t before = workingSet.size();
+
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            for (size_t j = 0; j < candidates.size(); ++j) {
+                if (i == j) continue;
+                std::vector<Atom::Handle> premises = {candidates[i],
+                                                      candidates[j]};
+                if (!rule.canApply(premises)) continue;
+
+                auto conclusions = rule.apply(premises, space);
+                for (auto& c : conclusions) {
+                    float conf = TruthValue::getConfidence(c->getTruthValue());
+                    if (conf < minConfidence_) continue;
+                    if (std::find(workingSet.begin(), workingSet.end(), c) ==
+                        workingSet.end()) {
+                        workingSet.push_back(c);
+                    }
+                }
+            }
+        }
+
+        return workingSet.size() > before;
+    }
+
+private:
+    float minConfidence_;
+};
+
+/**
+ * PLNRevisionStep - Merge truth values of structurally identical atoms.
+ *
+ * When the working set contains two or more atoms that share the same
+ * structural hash (i.e. they are logically the same atom), their truth
+ * values are combined using the PLN revision formula and the duplicates
+ * are removed, leaving one atom with the revised truth value.
+ */
+class PLNRevisionStep : public InferenceStep {
+public:
+    std::string getName() const override { return "PLNRevision"; }
+
+    bool execute(std::vector<Atom::Handle>& workingSet,
+                 AtomSpace& /*space*/) override {
+        // Group indices by atom hash
+        std::unordered_map<size_t, std::vector<size_t>> byHash;
+        for (size_t i = 0; i < workingSet.size(); ++i) {
+            byHash[workingSet[i]->getHash()].push_back(i);
+        }
+
+        bool revised = false;
+        // Process groups with more than one member in reverse-index order
+        // so that erasing by index remains safe.
+        for (auto& [h, indices] : byHash) {
+            if (indices.size() < 2) continue;
+
+            // Combine all truth values via revision
+            Tensor combined = workingSet[indices[0]]->getTruthValue();
+            for (size_t k = 1; k < indices.size(); ++k) {
+                combined = TruthValue::revision(
+                    combined, workingSet[indices[k]]->getTruthValue());
+            }
+            workingSet[indices[0]]->setTruthValue(combined);
+
+            // Erase duplicates from highest index downward
+            for (size_t k = indices.size() - 1; k >= 1; --k) {
+                workingSet.erase(workingSet.begin() +
+                                 static_cast<ptrdiff_t>(indices[k]));
+            }
+            revised = true;
+        }
+        return revised;
+    }
+};
+
+/**
+ * PLNAbductionStep - Infer explanatory atoms using the PLN abduction rule.
+ *
+ * For each "observation" atom B whose truth-value strength exceeds
+ * @p minObservationStrength, and for each rule (A→B) in the working set,
+ * abduces that A is likely true and adds (or truth-value-revises) A in
+ * the working set.
+ */
+class PLNAbductionStep : public InferenceStep {
+public:
+    explicit PLNAbductionStep(float minObservationStrength = 0.7f,
+                              float minConfidence = 0.0f)
+        : minObsStrength_(minObservationStrength)
+        , minConfidence_(minConfidence) {}
+
+    std::string getName() const override { return "PLNAbduction"; }
+
+    bool execute(std::vector<Atom::Handle>& workingSet,
+                 AtomSpace& /*space*/) override {
+        size_t before = workingSet.size();
+
+        // Observations: atoms with strength >= minObsStrength_
+        std::vector<Atom::Handle> observations;
+        for (const auto& a : workingSet) {
+            if (TruthValue::getStrength(a->getTruthValue()) >= minObsStrength_)
+                observations.push_back(a);
+        }
+
+        // Rules: arity-2 inheritance/implication links
+        std::vector<Atom::Handle> rules;
+        for (const auto& a : workingSet) {
+            if (!a->isLink()) continue;
+            if (a->getType() != Atom::Type::INHERITANCE_LINK &&
+                a->getType() != Atom::Type::IMPLICATION_LINK) continue;
+            if (static_cast<const Link*>(a.get())->getArity() == 2)
+                rules.push_back(a);
+        }
+
+        for (const auto& obs : observations) {
+            for (const auto& rule : rules) {
+                const Link* rl = static_cast<const Link*>(rule.get());
+                auto B = rl->getOutgoingAtom(1);
+                if (B->getHash() != obs->getHash()) continue;
+
+                auto A = rl->getOutgoingAtom(0);
+                Tensor abdTV =
+                    TruthValue::abduction(obs->getTruthValue(),
+                                         rule->getTruthValue());
+                if (TruthValue::getConfidence(abdTV) < minConfidence_) continue;
+
+                // Update existing entry or append a new one
+                auto it = std::find(workingSet.begin(), workingSet.end(), A);
+                if (it == workingSet.end()) {
+                    A->setTruthValue(abdTV);
+                    workingSet.push_back(A);
+                } else {
+                    (*it)->setTruthValue(
+                        TruthValue::revision((*it)->getTruthValue(), abdTV));
+                }
+            }
+        }
+
+        return workingSet.size() > before;
+    }
+
+private:
+    float minObsStrength_;
+    float minConfidence_;
+};
+
+/**
+ * PLNInductionStep - Generalise from instances using the PLN induction rule.
+ *
+ * For each unique target atom T that appears as the *consequent* of one or
+ * more arity-2 links of @p linkType_ in the working set, counts the number
+ * of distinct antecedents (instances) and emits one MemberLink(instance, T)
+ * per instance carrying an induced truth value based on the instance count.
+ */
+class PLNInductionStep : public InferenceStep {
+public:
+    explicit PLNInductionStep(
+            Atom::Type linkType = Atom::Type::INHERITANCE_LINK)
+        : linkType_(linkType) {}
+
+    std::string getName() const override { return "PLNInduction"; }
+
+    bool execute(std::vector<Atom::Handle>& workingSet,
+                 AtomSpace& space) override {
+        // Map target-hash → (target atom, list of source atoms)
+        std::unordered_map<size_t, Atom::Handle> hashToTarget;
+        std::unordered_map<size_t, std::vector<Atom::Handle>> targetToSources;
+
+        for (const auto& a : workingSet) {
+            if (!a->isLink() || a->getType() != linkType_) continue;
+            const Link* l = static_cast<const Link*>(a.get());
+            if (l->getArity() != 2) continue;
+
+            auto src = l->getOutgoingAtom(0);
+            auto tgt = l->getOutgoingAtom(1);
+            hashToTarget[tgt->getHash()] = tgt;
+            targetToSources[tgt->getHash()].push_back(src);
+        }
+
+        if (targetToSources.empty()) return false;
+
+        size_t before = workingSet.size();
+
+        for (auto& [h, sources] : targetToSources) {
+            auto tgt = hashToTarget[h];
+            int count = static_cast<int>(sources.size());
+            Tensor inducedTV = TruthValue::induction(count, count);
+
+            for (const auto& src : sources) {
+                auto memberLink =
+                    space.addLink(Atom::Type::MEMBER_LINK, {src, tgt});
+                memberLink->setTruthValue(inducedTV);
+
+                if (std::find(workingSet.begin(), workingSet.end(),
+                              memberLink) == workingSet.end()) {
+                    workingSet.push_back(memberLink);
+                }
+            }
+        }
+
+        return workingSet.size() > before;
+    }
+
+private:
+    Atom::Type linkType_;
+};
+
+// ======================================================================== //
 //  Pipeline execution context and result                                     //
 // ======================================================================== //
 
@@ -365,6 +602,29 @@ public:
             const std::string& name,
             std::function<bool(std::vector<Atom::Handle>&, AtomSpace&)> fn) {
         return addStep(std::make_shared<CustomStep>(name, std::move(fn)));
+    }
+
+    /** Append a PLN deduction step (Phase 11) */
+    InferencePipeline& plnDeduction(float minConfidence = 0.0f) {
+        return addStep(std::make_shared<PLNDeductionStep>(minConfidence));
+    }
+
+    /** Append a PLN revision step (Phase 11) */
+    InferencePipeline& plnRevision() {
+        return addStep(std::make_shared<PLNRevisionStep>());
+    }
+
+    /** Append a PLN abduction step (Phase 11) */
+    InferencePipeline& plnAbduction(float minObsStrength = 0.7f,
+                                    float minConfidence = 0.0f) {
+        return addStep(
+            std::make_shared<PLNAbductionStep>(minObsStrength, minConfidence));
+    }
+
+    /** Append a PLN induction step (Phase 11) */
+    InferencePipeline& plnInduction(
+            Atom::Type linkType = Atom::Type::INHERITANCE_LINK) {
+        return addStep(std::make_shared<PLNInductionStep>(linkType));
     }
 
     // ------------------------------------------------------------------ //
@@ -489,6 +749,24 @@ inline InferencePipeline makeHypothesisVerificationPipeline(
     InferencePipeline p(space);
     p.backwardChain(std::move(goal), maxDepth)
      .filterByTV(0.0f, minConfidence);
+    return p;
+}
+
+/**
+ * Create a PLN reasoning pipeline (Phase 11):
+ *   1. PLN deduction — derive transitive implications
+ *   2. PLN revision  — merge duplicate truth values
+ *   3. Filter by truth-value threshold
+ */
+inline InferencePipeline makePLNReasoningPipeline(
+        AtomSpace& space,
+        float tvThreshold = 0.0f,
+        float minConfidence = 0.0f) {
+
+    InferencePipeline p(space);
+    p.plnDeduction(minConfidence)
+     .plnRevision()
+     .filterByTV(tvThreshold, minConfidence);
     return p;
 }
 

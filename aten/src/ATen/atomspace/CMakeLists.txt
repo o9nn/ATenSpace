@@ -181,6 +181,11 @@ add_executable(atomspace_test_phase10 test_phase10.cpp)
 target_link_libraries(atomspace_test_phase10 ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_phase10 PROPERTY CXX_STANDARD 17)
 
+# PLN pipeline steps test (Phase 11)
+add_executable(atomspace_test_phase11 test_phase11.cpp)
+target_link_libraries(atomspace_test_phase11 ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_phase11 PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 

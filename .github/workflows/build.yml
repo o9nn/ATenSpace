@@ -84,7 +84,9 @@ jobs:
             atomspace_test_vision \
             atomspace_test_nn \
             atomspace_test_model_loader \
-            atomspace_test_tokenization; do
+            atomspace_test_tokenization \
+            atomspace_test_phase10 \
+            atomspace_test_phase11; do
             echo "Checking $bin..."
             test -f "build/$bin" || { echo "MISSING: $bin"; exit 1; }
           done

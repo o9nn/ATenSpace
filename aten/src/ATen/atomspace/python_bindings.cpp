@@ -228,12 +228,75 @@ PYBIND11_MODULE(atenspace, m) {
             return keys;
         });
 
-    py::class_<PatternMatcher>(m, "PatternMatcher")
-        .def(py::init<AtomSpace&>())
-        .def("match", &PatternMatcher::match,
-             py::arg("pattern"), py::arg("target"))
-        .def("query", &PatternMatcher::query,
-             py::arg("pattern"), py::arg("callback"));
+    py::class_<PatternMatcher>(m, "PatternMatcher",
+        "Static-method class for pattern matching and unification.")
+        // match(pattern, target) → bool
+        .def_static("match",
+            [](const Atom::Handle& pattern, const Atom::Handle& target) {
+                VariableBinding bindings;
+                return PatternMatcher::match(pattern, target, bindings);
+            }, py::arg("pattern"), py::arg("target"),
+            "Return True if pattern matches target (bindings discarded).")
+        // match_with_bindings(pattern, target) → (bool, dict)
+        .def_static("match_with_bindings",
+            [](const Atom::Handle& pattern, const Atom::Handle& target) {
+                VariableBinding bindings;
+                bool ok = PatternMatcher::match(pattern, target, bindings);
+                return std::make_pair(ok, bindings);
+            }, py::arg("pattern"), py::arg("target"),
+            "Return (matched, bindings_dict) after matching pattern against target.")
+        // find_matches(space, pattern) → list[(atom, bindings_dict)]
+        .def_static("find_matches",
+            [](AtomSpace& space, const Atom::Handle& pattern) {
+                return PatternMatcher::findMatches(space, pattern);
+            }, py::arg("space"), py::arg("pattern"),
+            "Search the AtomSpace for all atoms matching pattern; "
+            "returns list of (atom, bindings_dict).")
+        // substitute(pattern, bindings, space) → atom
+        .def_static("substitute",
+            [](const Atom::Handle& pattern,
+               const VariableBinding& bindings,
+               AtomSpace& space) {
+                return PatternMatcher::substitute(pattern, bindings, space);
+            }, py::arg("pattern"), py::arg("bindings"), py::arg("space"),
+            "Apply variable bindings to a pattern, producing a ground atom.")
+        // unify(p1, p2) → (bool, bindings_dict)
+        .def_static("unify",
+            [](const Atom::Handle& p1, const Atom::Handle& p2) {
+                VariableBinding bindings;
+                bool ok = PatternMatcher::unify(p1, p2, bindings);
+                return std::make_pair(ok, bindings);
+            }, py::arg("pattern1"), py::arg("pattern2"),
+            "Unify two patterns, returning (unified, bindings_dict).")
+        .def_static("is_variable", &PatternMatcher::isVariable,
+            py::arg("atom"), "True if atom is a plain VariableNode.")
+        .def_static("is_typed_variable", &PatternMatcher::isTypedVariable,
+            py::arg("atom"), "True if atom is a TypedVariableNode.")
+        .def_static("is_glob", &PatternMatcher::isGlob,
+            py::arg("atom"), "True if atom is a GlobNode.")
+        .def_static("get_type_constraint", &PatternMatcher::getTypeConstraint,
+            py::arg("atom"),
+            "Return the type-constraint string for a TypedVariableNode.")
+        // Legacy callback-based query kept for backward compatibility
+        .def_static("query",
+            [](AtomSpace& space,
+               const Atom::Handle& pattern,
+               py::function callback) {
+                PatternMatcher::query(
+                    space, pattern,
+                    [&](const Atom::Handle& a, const VariableBinding& b) {
+                        callback(a, b);
+                    });
+            }, py::arg("space"), py::arg("pattern"), py::arg("callback"));
+
+    py::class_<Pattern>(m, "Pattern",
+        "Helper utilities for inspecting and manipulating patterns.")
+        .def_static("has_variables", &Pattern::hasVariables,
+            py::arg("atom"),
+            "Return True if the pattern contains any VariableNode atoms.")
+        .def_static("get_variables", &Pattern::getVariables,
+            py::arg("atom"),
+            "Return a list of all VariableNode atoms found in the pattern.");
 
     // ============================================================
     // PLN - TRUTH VALUES
@@ -596,7 +659,7 @@ PYBIND11_MODULE(atenspace, m) {
           "Load a BPETokenizer (GPT-2) from a directory containing vocab.json + merges.txt");
 
     // Module version
-    m.attr("__version__") = "0.10.0";
+    m.attr("__version__") = "0.11.0";
 
     // ============================================================
     // PHASE 9 + 10 BINDINGS
@@ -812,6 +875,33 @@ PYBIND11_MODULE(atenspace, m) {
              }),
              py::arg("name"), py::arg("fn"));
 
+    // ============================================================
+    // PLN pipeline steps (Phase 11)
+    // ============================================================
+
+    py::class_<PLNDeductionStep, InferenceStep,
+               std::shared_ptr<PLNDeductionStep>>(m, "PLNDeductionStep",
+        "Apply PLN deduction (A→B, B→C ⊢ A→C) to link pairs in the working set.")
+        .def(py::init<float>(), py::arg("min_confidence") = 0.0f);
+
+    py::class_<PLNRevisionStep, InferenceStep,
+               std::shared_ptr<PLNRevisionStep>>(m, "PLNRevisionStep",
+        "Merge truth values of structurally identical atoms via PLN revision.")
+        .def(py::init<>());
+
+    py::class_<PLNAbductionStep, InferenceStep,
+               std::shared_ptr<PLNAbductionStep>>(m, "PLNAbductionStep",
+        "Infer explanatory atoms using PLN abduction (B, A→B ⊢ A).")
+        .def(py::init<float, float>(),
+             py::arg("min_observation_strength") = 0.7f,
+             py::arg("min_confidence") = 0.0f);
+
+    py::class_<PLNInductionStep, InferenceStep,
+               std::shared_ptr<PLNInductionStep>>(m, "PLNInductionStep",
+        "Generalise from instances using PLN induction, emitting MemberLinks.")
+        .def(py::init<Atom::Type>(),
+             py::arg("link_type") = Atom::Type::INHERITANCE_LINK);
+
     py::class_<InferencePipeline>(m, "InferencePipeline",
         "Composable, ordered sequence of inference steps.")
         .def(py::init<AtomSpace&>(), py::arg("space"))
@@ -857,7 +947,34 @@ PYBIND11_MODULE(atenspace, m) {
         .def("clear",
              [](InferencePipeline& p) -> InferencePipeline& {
                  return p.clear();
-             }, py::return_value_policy::reference);
+             }, py::return_value_policy::reference)
+        // PLN step shortcuts (Phase 11)
+        .def("pln_deduction",
+             [](InferencePipeline& p, float minConf) -> InferencePipeline& {
+                 return p.plnDeduction(minConf);
+             }, py::arg("min_confidence") = 0.0f,
+             py::return_value_policy::reference,
+             "Append a PLNDeductionStep.")
+        .def("pln_revision",
+             [](InferencePipeline& p) -> InferencePipeline& {
+                 return p.plnRevision();
+             }, py::return_value_policy::reference,
+             "Append a PLNRevisionStep.")
+        .def("pln_abduction",
+             [](InferencePipeline& p,
+                float minObs, float minConf) -> InferencePipeline& {
+                 return p.plnAbduction(minObs, minConf);
+             }, py::arg("min_observation_strength") = 0.7f,
+             py::arg("min_confidence") = 0.0f,
+             py::return_value_policy::reference,
+             "Append a PLNAbductionStep.")
+        .def("pln_induction",
+             [](InferencePipeline& p,
+                Atom::Type lt) -> InferencePipeline& {
+                 return p.plnInduction(lt);
+             }, py::arg("link_type") = Atom::Type::INHERITANCE_LINK,
+             py::return_value_policy::reference,
+             "Append a PLNInductionStep.");
 
     m.def("make_forward_reasoning_pipeline",
           &makeForwardReasoningPipeline,
@@ -870,6 +987,13 @@ PYBIND11_MODULE(atenspace, m) {
           py::arg("space"), py::arg("goal"),
           py::arg("min_confidence") = 0.6f, py::arg("max_depth") = 5,
           "Create a hypothesis verification pipeline.");
+
+    m.def("make_pln_reasoning_pipeline",
+          &makePLNReasoningPipeline,
+          py::arg("space"),
+          py::arg("tv_threshold") = 0.0f,
+          py::arg("min_confidence") = 0.0f,
+          "Create a PLN reasoning pipeline (deduction → revision → filter).");
 
     // ---- HebbianLearner ----------------------------------------
 
