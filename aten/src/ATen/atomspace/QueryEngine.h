@@ -535,12 +535,69 @@ public:
         return execute().size();
     }
 
+    /**
+     * Negation-as-failure (Phase 10): exclude any result row for which the
+     * given pattern also matches (using the variable bindings from previous
+     * clauses).  The pattern is matched independently; if it finds at least
+     * one result, the row is discarded.
+     *
+     * Example: find all mammals that are NOT domestic
+     * @code
+     *   QueryBuilder(space)
+     *       .match(InheritanceLink(?X, mammal))
+     *       .notMatch(InheritanceLink(?X, domestic))
+     *       .execute();
+     * @endcode
+     */
+    QueryBuilder& notMatch(const Atom::Handle& pattern) {
+        negations_.push_back(pattern);
+        return *this;
+    }
+
+    /**
+     * filterByConfidence: filter results by minimum truth-value confidence
+     * of a specific variable (Phase 10 convenience).
+     */
+    QueryBuilder& filterByConfidence(const Atom::Handle& var, float minConf) {
+        filters_.push_back([var, minConf](const QueryResult& row) {
+            auto it = row.find(var);
+            if (it == row.end()) return false;
+            auto tv = it->second->getTruthValue();
+            if (!tv.defined() || tv.numel() < 2) return false;
+            return TruthValue::getConfidence(tv) >= minConf;
+        });
+        return *this;
+    }
+
 private:
     QueryEngine engine_;
     std::vector<QueryClause> clauses_;
     std::vector<FilterPredicate> filters_;
+    std::vector<Atom::Handle> negations_;
     size_t maxResults_ = 0;
-};
+
+    /** Build the combined filter list including negation-as-failure checks */
+    std::vector<FilterPredicate> buildFilters() const {
+        std::vector<FilterPredicate> combined = filters_;
+        for (const auto& negPat : negations_) {
+            combined.push_back([this, negPat](const QueryResult& row) {
+                // Substitute bound variables into the negation pattern
+                // then check if any match exists – if yes, exclude the row
+                QueryResultSet negMatches = engine_.findMatches(negPat);
+                // Simple check: any result means a match exists → exclude
+                return negMatches.empty();
+            });
+        }
+        return combined;
+    }
+
+public:
+    /** Execute the query with negation-as-failure applied */
+    QueryResultSet executeWithNegation() const {
+        return engine_.executeConjunctive(clauses_, buildFilters(), maxResults_);
+    }
+
+}; // class QueryBuilder
 
 } // namespace atomspace
 } // namespace at

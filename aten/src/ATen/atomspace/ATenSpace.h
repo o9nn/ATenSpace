@@ -94,6 +94,27 @@ inline Atom::Handle createVariableNode(
     return space.addNode(Atom::Type::VARIABLE_NODE, name);
 }
 
+// Phase 10: Create a type-constrained variable node.
+// The variable will only bind to atoms whose getTypeName() equals constraintTypeName.
+// Name format stored internally: "?VarName:ConstraintTypeName"
+// Example: createTypedVariableNode(space, "?X", "ConceptNode")
+inline Atom::Handle createTypedVariableNode(
+    AtomSpace& space,
+    const std::string& varName,
+    const std::string& constraintTypeName) {
+    // Encode constraint in the node name
+    std::string encoded = varName + ":" + constraintTypeName;
+    return space.addNode(Atom::Type::TYPED_VARIABLE_NODE, encoded);
+}
+
+// Phase 10: Create a glob node (sequence wildcard).
+// Inside a link's outgoing set, a GlobNode matches zero or more atoms.
+inline Atom::Handle createGlobNode(
+    AtomSpace& space,
+    const std::string& name = "@") {
+    return space.addNode(Atom::Type::GLOB_NODE, name);
+}
+
 // Create an inheritance link: A inherits from B
 inline Atom::Handle createInheritanceLink(
     AtomSpace& space,

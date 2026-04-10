@@ -1,6 +1,6 @@
 /**
  * Python Bindings for ATenSpace
- * 
+ *
  * Provides Python API access to ATenSpace cognitive architecture:
  * - Core AtomSpace (knowledge representation)
  * - PLN (Probabilistic Logic Networks)
@@ -9,8 +9,8 @@
  * - Vision (Visual Perception)
  * - CognitiveEngine (Integrated reasoning)
  * - ModelLoader (TorchScript model loading) - Phase 8
- * 
- * Phase 8 - Model Loading Integration
+ * - QueryEngine, BinarySerializer, InferencePipeline, HebbianLearner - Phase 9
+ * - TypedVariable / GlobNode / negation-as-failure - Phase 10
  */
 
 #include <pybind11/pybind11.h>
@@ -21,6 +21,10 @@
 #include "ATenSpace.h"
 #include "ModelLoader.h"
 #include "Tokenizer.h"
+#include "QueryEngine.h"
+#include "BinarySerializer.h"
+#include "InferencePipeline.h"
+#include "HebbianLearner.h"
 
 namespace py = pybind11;
 using namespace at::atomspace;
@@ -53,6 +57,13 @@ PYBIND11_MODULE(atenspace, m) {
         .value("SIMULTANEOUS_LINK", Atom::Type::SIMULTANEOUS_LINK)
         .value("CONTEXT_LINK", Atom::Type::CONTEXT_LINK)
         .value("EXECUTION_LINK", Atom::Type::EXECUTION_LINK)
+        // Phase 10 additions
+        .value("HEBBIAN_LINK",            Atom::Type::HEBBIAN_LINK)
+        .value("SYMMETRIC_HEBBIAN_LINK",  Atom::Type::SYMMETRIC_HEBBIAN_LINK)
+        .value("ASYMMETRIC_HEBBIAN_LINK", Atom::Type::ASYMMETRIC_HEBBIAN_LINK)
+        .value("INVERSE_HEBBIAN_LINK",    Atom::Type::INVERSE_HEBBIAN_LINK)
+        .value("TYPED_VARIABLE_NODE",     Atom::Type::TYPED_VARIABLE_NODE)
+        .value("GLOB_NODE",               Atom::Type::GLOB_NODE)
         .export_values();
 
     // Atom base class
@@ -585,5 +596,319 @@ PYBIND11_MODULE(atenspace, m) {
           "Load a BPETokenizer (GPT-2) from a directory containing vocab.json + merges.txt");
 
     // Module version
-    m.attr("__version__") = "0.8.0";
+    m.attr("__version__") = "0.10.0";
+
+    // ============================================================
+    // PHASE 9 + 10 BINDINGS
+    // ============================================================
+
+    // ---- QueryEngine -------------------------------------------
+
+    py::class_<QueryClause>(m, "QueryClause",
+        "A single pattern clause for use in a conjunctive query.")
+        .def(py::init<Atom::Handle, bool>(),
+             py::arg("pattern"), py::arg("optional") = false)
+        .def_readwrite("optional", &QueryClause::optional)
+        .def_readwrite("match_any_type", &QueryClause::matchAnyType);
+
+    py::class_<QueryEngine>(m, "QueryEngine",
+        "Advanced multi-pattern conjunctive query engine over the hypergraph.")
+        .def(py::init<AtomSpace&>(), py::arg("space"))
+        .def("find_matches", &QueryEngine::findMatches,
+             py::arg("pattern"),
+             "Find all atoms matching a single pattern (returns list of VariableBinding dicts).")
+        .def("execute_conjunctive",
+             [](const QueryEngine& qe,
+                const std::vector<QueryClause>& clauses,
+                size_t maxResults) {
+                 return qe.executeConjunctive(clauses, {}, maxResults);
+             },
+             py::arg("clauses"), py::arg("max_results") = 0)
+        .def("find_by_type", &QueryEngine::findByType,
+             py::arg("type"))
+        .def("find_by_truth_strength", &QueryEngine::findByTruthStrength,
+             py::arg("min_strength"), py::arg("min_confidence") = 0.0f)
+        .def("find_similar", &QueryEngine::findSimilar,
+             py::arg("embedding"), py::arg("top_k") = 10)
+        .def("neighbourhood", &QueryEngine::neighbourhood,
+             py::arg("seed"), py::arg("depth") = 1)
+        .def("count",
+             [](const QueryEngine& qe, const Atom::Handle& pat) {
+                 return qe.count(pat);
+             }, py::arg("pattern"))
+        .def("exists",
+             [](const QueryEngine& qe, const Atom::Handle& pat) {
+                 return qe.exists(pat);
+             }, py::arg("pattern"));
+
+    py::class_<QueryBuilder>(m, "QueryBuilder",
+        "Fluent builder for constructing and executing hypergraph queries.")
+        .def(py::init<AtomSpace&>(), py::arg("space"))
+        .def("match",
+             [](QueryBuilder& qb, const Atom::Handle& pat) -> QueryBuilder& {
+                 return qb.match(pat);
+             }, py::arg("pattern"), py::return_value_policy::reference)
+        .def("optional_match",
+             [](QueryBuilder& qb, const Atom::Handle& pat) -> QueryBuilder& {
+                 return qb.optionalMatch(pat);
+             }, py::arg("pattern"), py::return_value_policy::reference)
+        .def("not_match",
+             [](QueryBuilder& qb, const Atom::Handle& pat) -> QueryBuilder& {
+                 return qb.notMatch(pat);
+             }, py::arg("pattern"), py::return_value_policy::reference)
+        .def("filter",
+             [](QueryBuilder& qb, py::function pred) -> QueryBuilder& {
+                 return qb.filter([pred](const QueryResult& row) -> bool {
+                     return pred(row).cast<bool>();
+                 });
+             }, py::arg("predicate"), py::return_value_policy::reference)
+        .def("filter_by_strength",
+             [](QueryBuilder& qb,
+                const Atom::Handle& var,
+                float minS) -> QueryBuilder& {
+                 return qb.filterByStrength(var, minS);
+             }, py::arg("var"), py::arg("min_strength"),
+             py::return_value_policy::reference)
+        .def("filter_by_confidence",
+             [](QueryBuilder& qb,
+                const Atom::Handle& var,
+                float minC) -> QueryBuilder& {
+                 return qb.filterByConfidence(var, minC);
+             }, py::arg("var"), py::arg("min_confidence"),
+             py::return_value_policy::reference)
+        .def("limit",
+             [](QueryBuilder& qb, size_t n) -> QueryBuilder& {
+                 return qb.limit(n);
+             }, py::arg("n"), py::return_value_policy::reference)
+        .def("execute",         &QueryBuilder::execute)
+        .def("execute_with_negation", &QueryBuilder::executeWithNegation)
+        .def("count",           &QueryBuilder::count);
+
+    // Phase 10 factory helpers
+    m.def("create_typed_variable_node", &createTypedVariableNode,
+          py::arg("space"), py::arg("var_name"), py::arg("constraint_type_name"),
+          "Create a TypedVariableNode that only binds to atoms of the given type name.");
+    m.def("create_glob_node", &createGlobNode,
+          py::arg("space"), py::arg("name") = "@",
+          "Create a GlobNode (sequence wildcard) for use inside link patterns.");
+
+    // ---- BinarySerializer --------------------------------------
+
+    // Expose as module-level functions (all methods are static)
+    m.def("save_atomspace",
+          [](const AtomSpace& space, const std::string& path) {
+              return BinarySerializer::save(space, path);
+          },
+          py::arg("space"), py::arg("path"),
+          "Serialize AtomSpace to a binary file. Returns True on success.");
+
+    m.def("load_atomspace",
+          [](AtomSpace& space, const std::string& path) {
+              return BinarySerializer::load(space, path);
+          },
+          py::arg("space"), py::arg("path"),
+          "Deserialize AtomSpace from a binary file. Returns True on success.");
+
+    m.def("serialize_atomspace",
+          [](const AtomSpace& space) -> py::bytes {
+              auto buf = BinarySerializer::serialize(space);
+              return py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
+          },
+          py::arg("space"),
+          "Serialize AtomSpace to an in-memory bytes object.");
+
+    m.def("deserialize_atomspace",
+          [](AtomSpace& space, py::bytes data) {
+              std::string s = data;
+              std::vector<uint8_t> buf(s.begin(), s.end());
+              BinarySerializer::deserialize(space, buf);
+          },
+          py::arg("space"), py::arg("data"),
+          "Deserialize AtomSpace from a bytes object.");
+
+    // ---- InferencePipeline -------------------------------------
+
+    py::class_<StepStats>(m, "StepStats",
+        "Per-step statistics for an InferencePipeline run.")
+        .def_readonly("step_name",       &StepStats::stepName)
+        .def_readonly("produced",        &StepStats::produced)
+        .def_readonly("working_set_size",&StepStats::workingSetSize)
+        .def_readonly("elapsed_ms",      &StepStats::elapsedMs);
+
+    py::class_<PipelineResult>(m, "PipelineResult",
+        "Result of a full InferencePipeline run.")
+        .def_readonly("atoms",          &PipelineResult::atoms)
+        .def_readonly("stats",          &PipelineResult::stats)
+        .def_readonly("converged",      &PipelineResult::converged)
+        .def_readonly("iterations_run", &PipelineResult::iterationsRun)
+        .def("total_ms",                &PipelineResult::totalMs);
+
+    // InferenceStep abstract base with Python trampoline
+    {
+        struct PyInferenceStep : public InferenceStep {
+            using InferenceStep::InferenceStep;
+            std::string getName() const override {
+                PYBIND11_OVERRIDE_PURE(std::string, InferenceStep, getName,);
+            }
+            bool execute(std::vector<Atom::Handle>& workingSet,
+                         AtomSpace& space) override {
+                PYBIND11_OVERRIDE_PURE(bool, InferenceStep, execute,
+                                       workingSet, space);
+            }
+        };
+        py::class_<InferenceStep, PyInferenceStep, std::shared_ptr<InferenceStep>>(
+                m, "InferenceStep",
+                "Abstract base class for a single inference pipeline step.")
+            .def(py::init<>())
+            .def("get_name", &InferenceStep::getName)
+            .def("execute",  &InferenceStep::execute,
+                 py::arg("working_set"), py::arg("space"));
+    }
+
+    py::class_<ForwardChainingStep, InferenceStep,
+               std::shared_ptr<ForwardChainingStep>>(m, "ForwardChainingStep")
+        .def(py::init<int>(), py::arg("max_rounds") = 1);
+
+    py::class_<BackwardChainingStep, InferenceStep,
+               std::shared_ptr<BackwardChainingStep>>(m, "BackwardChainingStep")
+        .def(py::init<Atom::Handle, int>(),
+             py::arg("goal"), py::arg("max_depth") = 5);
+
+    py::class_<TruthValueThresholdStep, InferenceStep,
+               std::shared_ptr<TruthValueThresholdStep>>(m, "TruthValueThresholdStep")
+        .def(py::init<float, float>(),
+             py::arg("min_strength"), py::arg("min_confidence") = 0.0f);
+
+    py::class_<PatternMatchStep, InferenceStep,
+               std::shared_ptr<PatternMatchStep>>(m, "PatternMatchStep")
+        .def(py::init<Atom::Handle>(), py::arg("pattern"));
+
+    py::class_<AttentionBoostStep, InferenceStep,
+               std::shared_ptr<AttentionBoostStep>>(m, "AttentionBoostStep")
+        .def(py::init<AttentionBank&, float>(),
+             py::arg("bank"), py::arg("boost") = 10.0f);
+
+    py::class_<FilterStep, InferenceStep,
+               std::shared_ptr<FilterStep>>(m, "FilterStep",
+        "Filter atoms from the working set using a Python predicate.")
+        .def(py::init([](const std::string& name, py::function pred) {
+                 return std::make_shared<FilterStep>(
+                     name,
+                     [pred](const Atom::Handle& a) -> bool {
+                         return pred(a).cast<bool>();
+                     });
+             }),
+             py::arg("name"), py::arg("predicate"));
+
+    py::class_<CustomStep, InferenceStep,
+               std::shared_ptr<CustomStep>>(m, "CustomStep",
+        "Wrap an arbitrary Python callable as an InferenceStep.")
+        .def(py::init([](const std::string& name, py::function fn) {
+                 return std::make_shared<CustomStep>(
+                     name,
+                     [fn](std::vector<Atom::Handle>& ws, AtomSpace& sp) -> bool {
+                         return fn(ws, sp).cast<bool>();
+                     });
+             }),
+             py::arg("name"), py::arg("fn"));
+
+    py::class_<InferencePipeline>(m, "InferencePipeline",
+        "Composable, ordered sequence of inference steps.")
+        .def(py::init<AtomSpace&>(), py::arg("space"))
+        .def("add_step",
+             [](InferencePipeline& p,
+                std::shared_ptr<InferenceStep> step) -> InferencePipeline& {
+                 return p.addStep(std::move(step));
+             }, py::arg("step"), py::return_value_policy::reference)
+        .def("forward_chain",
+             [](InferencePipeline& p, int rounds) -> InferencePipeline& {
+                 return p.forwardChain(rounds);
+             }, py::arg("rounds") = 1, py::return_value_policy::reference)
+        .def("backward_chain",
+             [](InferencePipeline& p,
+                Atom::Handle goal,
+                int depth) -> InferencePipeline& {
+                 return p.backwardChain(std::move(goal), depth);
+             }, py::arg("goal"), py::arg("max_depth") = 5,
+             py::return_value_policy::reference)
+        .def("match_pattern",
+             [](InferencePipeline& p,
+                Atom::Handle pat) -> InferencePipeline& {
+                 return p.matchPattern(std::move(pat));
+             }, py::arg("pattern"), py::return_value_policy::reference)
+        .def("filter_by_tv",
+             [](InferencePipeline& p,
+                float minS, float minC) -> InferencePipeline& {
+                 return p.filterByTV(minS, minC);
+             }, py::arg("min_strength"), py::arg("min_confidence") = 0.0f,
+             py::return_value_policy::reference)
+        .def("run",
+             [](InferencePipeline& p,
+                std::vector<Atom::Handle> seeds,
+                bool untilFixed,
+                int maxIter) {
+                 return p.run(std::move(seeds), untilFixed, maxIter);
+             },
+             py::arg("seeds") = std::vector<Atom::Handle>{},
+             py::arg("until_fixed_point") = false,
+             py::arg("max_iterations") = 100)
+        .def("size", &InferencePipeline::size)
+        .def("step_names", &InferencePipeline::stepNames)
+        .def("clear",
+             [](InferencePipeline& p) -> InferencePipeline& {
+                 return p.clear();
+             }, py::return_value_policy::reference);
+
+    m.def("make_forward_reasoning_pipeline",
+          &makeForwardReasoningPipeline,
+          py::arg("space"), py::arg("seed_pattern"),
+          py::arg("tv_threshold") = 0.5f, py::arg("fc_rounds") = 3,
+          "Create a standard forward-reasoning pipeline.");
+
+    m.def("make_hypothesis_verification_pipeline",
+          &makeHypothesisVerificationPipeline,
+          py::arg("space"), py::arg("goal"),
+          py::arg("min_confidence") = 0.6f, py::arg("max_depth") = 5,
+          "Create a hypothesis verification pipeline.");
+
+    // ---- HebbianLearner ----------------------------------------
+
+    py::class_<HebbianLearnerConfig>(m, "HebbianLearnerConfig",
+        "Configuration for HebbianLearner.")
+        .def(py::init<>())
+        .def_readwrite("learning_rate",     &HebbianLearnerConfig::learningRate)
+        .def_readwrite("decay_rate",        &HebbianLearnerConfig::decayRate)
+        .def_readwrite("prune_threshold",   &HebbianLearnerConfig::pruneThreshold)
+        .def_readwrite("max_strength",      &HebbianLearnerConfig::maxStrength)
+        .def_readwrite("asymmetric",        &HebbianLearnerConfig::asymmetric)
+        .def_readwrite("oja_rule",          &HebbianLearnerConfig::ojaRule)
+        .def_readwrite("min_activation_sti",&HebbianLearnerConfig::minActivationSTI);
+
+    py::class_<HebbianLearner>(m, "HebbianLearner",
+        "Associative learning from co-activation (Hebbian learning).")
+        .def(py::init<AtomSpace&, AttentionBank&>(),
+             py::arg("space"), py::arg("bank"))
+        .def(py::init<AtomSpace&, AttentionBank&, const HebbianLearnerConfig&>(),
+             py::arg("space"), py::arg("bank"), py::arg("config"))
+        .def("record_co_activation", &HebbianLearner::recordCoActivation,
+             py::arg("source"), py::arg("target"), py::arg("amount") = 1.0f)
+        .def("learn_from_attentional_focus",
+             &HebbianLearner::learnFromAttentionalFocus)
+        .def("decay", &HebbianLearner::decay)
+        .def("run_cycles", &HebbianLearner::runCycles, py::arg("cycles") = 1)
+        .def("reset", &HebbianLearner::reset)
+        .def("get_link", &HebbianLearner::getLink,
+             py::arg("a"), py::arg("b"))
+        .def("get_strength", &HebbianLearner::getStrength,
+             py::arg("a"), py::arg("b"))
+        .def("get_associates", &HebbianLearner::getAssociates,
+             py::arg("atom"), py::arg("min_strength") = 0.0f)
+        .def("get_all_hebbian_links", &HebbianLearner::getAllHebbianLinks)
+        .def("total_co_activations", &HebbianLearner::totalCoActivations)
+        .def("co_activation_count", &HebbianLearner::coActivationCount,
+             py::arg("a"), py::arg("b"))
+        .def("get_config", &HebbianLearner::getConfig,
+             py::return_value_policy::reference)
+        .def("set_config", &HebbianLearner::setConfig, py::arg("config"));
+
 }
