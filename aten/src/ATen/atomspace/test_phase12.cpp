@@ -253,7 +253,7 @@ void testSimilarityTV() {
         for (const auto& a : ws) {
             if (!a->isLink() || a->getType() != Atom::Type::SIMILARITY_LINK) continue;
             float s = TruthValue::getStrength(a->getTruthValue());
-            float expected = (sA * sB) / (sA + sB - sA * sB + 1e-6f);
+            float expected = (sA * sB) / (sA + sB - sA * sB + kPLNSimEps);
             ASSERT_NEAR(s, expected, 1e-3f);
         }
     END_TEST

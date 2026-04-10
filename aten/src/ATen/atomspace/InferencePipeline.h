@@ -493,6 +493,43 @@ private:
     Atom::Type linkType_;
 };
 
+// ======================================================================== //
+//  Phase 12 helpers (shared by PLNConjunctionStep, PLNDisjunctionStep,      //
+//  and PLNSimilarityStep)                                                    //
+// ======================================================================== //
+
+/// Epsilon used in the PLN similarity denominator to prevent division by zero.
+static constexpr float kPLNSimEps = 1e-6f;
+
+/**
+ * Compute a commutative pair key for two atom hashes.
+ * The key is the same regardless of the order of h0 and h1.
+ */
+inline size_t atomPairKey(size_t h0, size_t h1) noexcept {
+    // Use Fibonacci hashing to reduce collisions; symmetry is preserved by
+    // XOR-ing the two directional products.
+    constexpr size_t kFibMul = 0x9e3779b97f4a7c15ULL;
+    return (h0 ^ (h1 * kFibMul)) ^ (h1 ^ (h0 * kFibMul));
+}
+
+/**
+ * Build a set of existing ordered pair keys from binary links of a given type
+ * that are already present in the working set.
+ */
+inline std::unordered_set<size_t> existingBinaryPairs(
+        const std::vector<Atom::Handle>& workingSet,
+        Atom::Type linkType) {
+    std::unordered_set<size_t> keys;
+    for (const auto& a : workingSet) {
+        if (!a->isLink() || a->getType() != linkType) continue;
+        const Link* l = static_cast<const Link*>(a.get());
+        if (l->getArity() != 2) continue;
+        keys.insert(atomPairKey(l->getOutgoingAtom(0)->getHash(),
+                                l->getOutgoingAtom(1)->getHash()));
+    }
+    return keys;
+}
+
 /**
  * PLNConjunctionStep - Evaluate AND truth values (Phase 12).
  *
@@ -547,23 +584,12 @@ public:
                 candidates.push_back(a);
         }
 
-        // Build a set of existing AND_LINK pairs to avoid duplicates
-        std::unordered_set<size_t> existingPairs;
-        for (const auto& a : workingSet) {
-            if (!a->isLink() || a->getType() != Atom::Type::AND_LINK) continue;
-            const Link* l = static_cast<const Link*>(a.get());
-            if (l->getArity() != 2) continue;
-            size_t h0 = l->getOutgoingAtom(0)->getHash();
-            size_t h1 = l->getOutgoingAtom(1)->getHash();
-            existingPairs.insert(h0 ^ (h1 * 0x9e3779b97f4a7c15ULL));
-            existingPairs.insert(h1 ^ (h0 * 0x9e3779b97f4a7c15ULL));
-        }
+        auto existingPairs = existingBinaryPairs(workingSet, Atom::Type::AND_LINK);
 
         for (size_t i = 0; i < candidates.size(); ++i) {
             for (size_t j = i + 1; j < candidates.size(); ++j) {
-                size_t h0 = candidates[i]->getHash();
-                size_t h1 = candidates[j]->getHash();
-                size_t key = h0 ^ (h1 * 0x9e3779b97f4a7c15ULL);
+                size_t key = atomPairKey(candidates[i]->getHash(),
+                                         candidates[j]->getHash());
                 if (existingPairs.count(key)) continue;
 
                 auto andLink = space.addLink(
@@ -638,22 +664,12 @@ public:
                 candidates.push_back(a);
         }
 
-        std::unordered_set<size_t> existingPairs;
-        for (const auto& a : workingSet) {
-            if (!a->isLink() || a->getType() != Atom::Type::OR_LINK) continue;
-            const Link* l = static_cast<const Link*>(a.get());
-            if (l->getArity() != 2) continue;
-            size_t h0 = l->getOutgoingAtom(0)->getHash();
-            size_t h1 = l->getOutgoingAtom(1)->getHash();
-            existingPairs.insert(h0 ^ (h1 * 0x9e3779b97f4a7c15ULL));
-            existingPairs.insert(h1 ^ (h0 * 0x9e3779b97f4a7c15ULL));
-        }
+        auto existingPairs = existingBinaryPairs(workingSet, Atom::Type::OR_LINK);
 
         for (size_t i = 0; i < candidates.size(); ++i) {
             for (size_t j = i + 1; j < candidates.size(); ++j) {
-                size_t h0 = candidates[i]->getHash();
-                size_t h1 = candidates[j]->getHash();
-                size_t key = h0 ^ (h1 * 0x9e3779b97f4a7c15ULL);
+                size_t key = atomPairKey(candidates[i]->getHash(),
+                                         candidates[j]->getHash());
                 if (existingPairs.count(key)) continue;
 
                 auto orLink = space.addLink(
@@ -710,26 +726,16 @@ public:
         }
 
         // Track existing SIMILARITY_LINK pairs
-        std::unordered_set<size_t> existingPairs;
-        for (const auto& a : workingSet) {
-            if (!a->isLink() || a->getType() != Atom::Type::SIMILARITY_LINK)
-                continue;
-            const Link* l = static_cast<const Link*>(a.get());
-            if (l->getArity() != 2) continue;
-            size_t h0 = l->getOutgoingAtom(0)->getHash();
-            size_t h1 = l->getOutgoingAtom(1)->getHash();
-            existingPairs.insert(h0 ^ (h1 * 0x9e3779b97f4a7c15ULL));
-            existingPairs.insert(h1 ^ (h0 * 0x9e3779b97f4a7c15ULL));
-        }
+        auto existingPairs = existingBinaryPairs(workingSet,
+                                                  Atom::Type::SIMILARITY_LINK);
 
         for (size_t i = 0; i < eligible.size(); ++i) {
             for (size_t j = i + 1; j < eligible.size(); ++j) {
                 // Only pair atoms of the same type
                 if (eligible[i]->getType() != eligible[j]->getType()) continue;
 
-                size_t h0 = eligible[i]->getHash();
-                size_t h1 = eligible[j]->getHash();
-                size_t key = h0 ^ (h1 * 0x9e3779b97f4a7c15ULL);
+                size_t key = atomPairKey(eligible[i]->getHash(),
+                                          eligible[j]->getHash());
                 if (existingPairs.count(key)) continue;
 
                 float sA = TruthValue::getStrength(eligible[i]->getTruthValue());
@@ -737,8 +743,7 @@ public:
                 float cA = TruthValue::getConfidence(eligible[i]->getTruthValue());
                 float cB = TruthValue::getConfidence(eligible[j]->getTruthValue());
 
-                constexpr float kEps = 1e-6f;
-                float denom = sA + sB - sA * sB + kEps;
+                float denom = sA + sB - sA * sB + kPLNSimEps;
                 float simStrength = (sA * sB) / denom;
                 float simConf = std::min(cA, cB);
 

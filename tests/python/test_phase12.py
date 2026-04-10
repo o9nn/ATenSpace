@@ -205,10 +205,11 @@ class TestPLNSimilarityStep(unittest.TestCase):
         p = at.InferencePipeline(self.space)
         p.pln_similarity(0.3)
         result = p.run([A, B])
+        kEps = 1e-6  # matches kPLNSimEps in InferencePipeline.h
         for atom in result.atoms:
             if atom.get_type() == at.AtomType.SIMILARITY_LINK:
                 s = at.TruthValue.get_strength(atom.get_truth_value())
-                expected = (sA * sB) / (sA + sB - sA * sB + 1e-6)
+                expected = (sA * sB) / (sA + sB - sA * sB + kEps)
                 self.assertAlmostEqual(s, expected, places=2)
 
     def test_skips_high_threshold(self):
