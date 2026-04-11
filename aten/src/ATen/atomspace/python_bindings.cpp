@@ -106,12 +106,12 @@ PYBIND11_MODULE(atenspace, m) {
              py::arg("type"), py::arg("name"))
         .def("get_atoms_by_type", &AtomSpace::getAtomsByType,
              py::arg("type"))
-        .def("get_all_atoms", &AtomSpace::getAllAtoms)
-        .def("get_size", &AtomSpace::getSize)
+        .def("get_all_atoms", &AtomSpace::getAtoms)
+        .def("get_size", &AtomSpace::size)
         .def("clear", &AtomSpace::clear)
         .def("query_similar", &AtomSpace::querySimilar,
              py::arg("query_embedding"), py::arg("k") = 5)
-        .def("__len__", &AtomSpace::getSize);
+        .def("__len__", &AtomSpace::size);
 
     // Helper functions for creating atoms
     m.def("create_concept_node", 
