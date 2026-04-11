@@ -8,6 +8,11 @@ find_package(Torch REQUIRED)
 # Ordering is critical: torch headers must appear before the legacy aten/src
 # tree so that torch's own ATen/Tensor.h (and friends) are found first.
 #
+# Background: without this ordering, the compiler resolves <ATen/Tensor.h>
+# to the legacy aten/src/ATen/Tensor.h which includes
+# <ATen/core/TensorMethods.h> — a file removed in PyTorch 2.x — causing
+# fatal "file not found" errors on modern torch installations.
+#
 # 1. Torch headers first — added as SYSTEM so modern headers shadow old ones.
 include_directories(SYSTEM ${TORCH_INCLUDE_DIRS})
 # 2. Local atomspace directory — regular -I for relative includes like
