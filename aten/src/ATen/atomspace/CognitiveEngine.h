@@ -485,10 +485,10 @@ private:
      */
     void updateAttention() {
         // Get all atoms
-        auto atoms = space_.getAllAtoms();
+        auto atoms = space_.getAtoms();
         
         // Run ECAN cycle
-        ecan_->runCycle(atoms);
+        ecan_->runCycle();
         
         metrics_.attentionUpdates++;
         metrics_.atomsProcessed += atoms.size();
@@ -529,7 +529,7 @@ private:
         metrics_.inferencesPerformed += newAtoms;
         
         // Record creation time for new atoms
-        auto atoms = space_.getAllAtoms();
+        auto atoms = space_.getAtoms();
         for (const auto& atom : atoms) {
             if (!timeServer_->hasCreationTime(atom)) {
                 timeServer_->recordCreation(atom);
