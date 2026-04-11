@@ -762,7 +762,7 @@ PYBIND11_MODULE(atenspace, m) {
           "Load a BPETokenizer (GPT-2) from a directory containing vocab.json + merges.txt");
 
     // Module version
-    m.attr("__version__") = "0.12.0";
+    m.attr("__version__") = "0.13.0";
 
     // ============================================================
     // PHASE 9 + 10 BINDINGS
@@ -1024,6 +1024,23 @@ PYBIND11_MODULE(atenspace, m) {
         .def(py::init<float>(),
              py::arg("min_similarity") = 0.5f);
 
+    // Phase 13 PLN steps
+    py::class_<PLNImplicationStep, InferenceStep,
+               std::shared_ptr<PLNImplicationStep>>(m, "PLNImplicationStep",
+        "Evaluate and create IMPLICATION_LINK truth values using the PLN "
+        "material-implication formula (s = 1 - sA + sA*sB, c = min(cA,cB)).")
+        .def(py::init<float, float>(),
+             py::arg("min_antecedent_strength")  = 0.5f,
+             py::arg("min_implication_strength") = 0.5f);
+
+    py::class_<PLNImplicationChainStep, InferenceStep,
+               std::shared_ptr<PLNImplicationChainStep>>(m, "PLNImplicationChainStep",
+        "Compute the multi-hop transitive closure of IMPLICATION_LINKs up to "
+        "max_depth hops, deriving new links via the PLN deduction formula.")
+        .def(py::init<int, float>(),
+             py::arg("max_depth")          = 3,
+             py::arg("min_chain_confidence") = 0.0f);
+
     py::class_<InferencePipeline>(m, "InferencePipeline",
         "Composable, ordered sequence of inference steps.")
         .def(py::init<AtomSpace&>(), py::arg("space"))
@@ -1115,7 +1132,26 @@ PYBIND11_MODULE(atenspace, m) {
                  return p.plnSimilarity(minSim);
              }, py::arg("min_similarity") = 0.5f,
              py::return_value_policy::reference,
-             "Append a PLNSimilarityStep.");
+             "Append a PLNSimilarityStep.")
+        // PLN step shortcuts (Phase 13)
+        .def("pln_implication",
+             [](InferencePipeline& p,
+                float minAnt, float minImp) -> InferencePipeline& {
+                 return p.plnImplication(minAnt, minImp);
+             },
+             py::arg("min_antecedent_strength")  = 0.5f,
+             py::arg("min_implication_strength") = 0.5f,
+             py::return_value_policy::reference,
+             "Append a PLNImplicationStep.")
+        .def("pln_implication_chain",
+             [](InferencePipeline& p,
+                int maxDepth, float minConf) -> InferencePipeline& {
+                 return p.plnImplicationChain(maxDepth, minConf);
+             },
+             py::arg("max_depth")           = 3,
+             py::arg("min_chain_confidence") = 0.0f,
+             py::return_value_policy::reference,
+             "Append a PLNImplicationChainStep.");
 
     m.def("make_forward_reasoning_pipeline",
           &makeForwardReasoningPipeline,
@@ -1144,6 +1180,19 @@ PYBIND11_MODULE(atenspace, m) {
           py::arg("min_strength")    = 0.3f,
           py::arg("min_similarity")  = 0.5f,
           "Create a full PLN pipeline (deduction→conjunction→disjunction→similarity→revision→filter).");
+
+    m.def("make_pln_complete_pipeline",
+          &makePLNCompletePipeline,
+          py::arg("space"),
+          py::arg("tv_threshold")          = 0.0f,
+          py::arg("min_confidence")        = 0.0f,
+          py::arg("min_strength")          = 0.3f,
+          py::arg("min_similarity")        = 0.5f,
+          py::arg("min_antecedent_strength")  = 0.5f,
+          py::arg("min_implication_strength") = 0.5f,
+          py::arg("chain_max_depth")       = 3,
+          "Create a complete PLN pipeline (deduction→conjunction→disjunction→"
+          "similarity→implication→implication_chain→revision→filter).");
 
     // ---- HebbianLearner ----------------------------------------
 
