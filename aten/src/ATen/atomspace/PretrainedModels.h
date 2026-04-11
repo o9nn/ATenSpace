@@ -879,19 +879,19 @@ private:
     void buildModel() {
         // Simplified backbone (in practice, use ResNet/Darknet)
         backbone_ = torch::nn::Sequential(
-            torch::nn::Conv2d(3, 64, 3, 1, 1),
+            torch::nn::Conv2d(torch::nn::Conv2dOptions(3, 64, 3).stride(1).padding(1)),
             torch::nn::ReLU(),
             torch::nn::MaxPool2d(2),
-            torch::nn::Conv2d(64, 128, 3, 1, 1),
+            torch::nn::Conv2d(torch::nn::Conv2dOptions(64, 128, 3).stride(1).padding(1)),
             torch::nn::ReLU(),
             torch::nn::MaxPool2d(2),
-            torch::nn::Conv2d(128, 256, 3, 1, 1),
+            torch::nn::Conv2d(torch::nn::Conv2dOptions(128, 256, 3).stride(1).padding(1)),
             torch::nn::ReLU()
         );
         
         // Detection head
         detection_head_ = torch::nn::Sequential(
-            torch::nn::Conv2d(256, 512, 3, 1, 1),
+            torch::nn::Conv2d(torch::nn::Conv2dOptions(256, 512, 3).stride(1).padding(1)),
             torch::nn::ReLU(),
             torch::nn::Conv2d(512, 85, 1)  // 85 = 4 bbox + 1 obj + 80 classes
         );
