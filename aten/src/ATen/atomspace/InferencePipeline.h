@@ -769,6 +769,254 @@ private:
 };
 
 // ======================================================================== //
+//  Phase 13: PLN Implication steps                                          //
+// ======================================================================== //
+
+/**
+ * PLNImplicationStep - Evaluate and create IMPLICATION_LINK truth values
+ * (Phase 13).
+ *
+ * **Phase A** – Evaluate existing IMPLICATION_LINK(A, B) atoms in the working
+ * set whose truth value has not yet been computed (confidence == 0).  The
+ * PLN material-implication formula is applied:
+ *
+ *   strength   = 1 - sA + sA × sB          (P(A→B) = P(¬A) + P(A∧B))
+ *   confidence = min(cA, cB)               (limited-evidence principle)
+ *
+ * **Phase B** – For every ordered pair (A, B) of non-link atoms in the working
+ * set where A's strength ≥ @p minAntecedentStrength and no IMPLICATION_LINK
+ * already exists for that pair, creates a new IMPLICATION_LINK(A, B) using
+ * the formula above.
+ *
+ * Only pairs where both atoms have confidence > 0 are processed. The link is
+ * created only when the computed implication strength ≥ @p minImplicationStrength.
+ */
+class PLNImplicationStep : public InferenceStep {
+public:
+    explicit PLNImplicationStep(float minAntecedentStrength  = 0.5f,
+                                float minImplicationStrength = 0.5f)
+        : minAntStrength_(minAntecedentStrength)
+        , minImpStrength_(minImplicationStrength) {}
+
+    std::string getName() const override { return "PLNImplication"; }
+
+    bool execute(std::vector<Atom::Handle>& workingSet,
+                 AtomSpace& space) override {
+        size_t before = workingSet.size();
+        bool evaluated = false;
+
+        // Phase A: evaluate existing IMPLICATION_LINKs with unset TV
+        for (const auto& a : workingSet) {
+            if (!a->isLink() ||
+                a->getType() != Atom::Type::IMPLICATION_LINK) continue;
+            const Link* l = static_cast<const Link*>(a.get());
+            if (l->getArity() != 2) continue;
+            if (TruthValue::getConfidence(a->getTruthValue()) > 0.0f) continue;
+
+            auto antecedent = l->getOutgoingAtom(0);
+            auto consequent  = l->getOutgoingAtom(1);
+            float cA = TruthValue::getConfidence(antecedent->getTruthValue());
+            float cB = TruthValue::getConfidence(consequent->getTruthValue());
+            if (cA <= 0.0f || cB <= 0.0f) continue;
+
+            a->setTruthValue(TruthValue::implication(antecedent->getTruthValue(),
+                                                      consequent->getTruthValue()));
+            evaluated = true;
+        }
+
+        // Phase B: create IMPLICATION_LINK for qualifying ordered pairs
+        // Collect non-link atoms with usable TVs
+        std::vector<Atom::Handle> candidates;
+        for (const auto& a : workingSet) {
+            if (a->isLink()) continue;
+            float c = TruthValue::getConfidence(a->getTruthValue());
+            float s = TruthValue::getStrength(a->getTruthValue());
+            if (c > 0.0f && s >= minAntStrength_)
+                candidates.push_back(a);
+        }
+
+        // Track existing ordered IMPLICATION_LINK pairs (A→B ≠ B→A)
+        std::unordered_set<size_t> existingPairs;
+        constexpr size_t kFibMul = 0x9e3779b97f4a7c15ULL;
+        for (const auto& a : workingSet) {
+            if (!a->isLink() || a->getType() != Atom::Type::IMPLICATION_LINK) continue;
+            const Link* l = static_cast<const Link*>(a.get());
+            if (l->getArity() != 2) continue;
+            size_t h0 = l->getOutgoingAtom(0)->getHash();
+            size_t h1 = l->getOutgoingAtom(1)->getHash();
+            existingPairs.insert(h0 * kFibMul ^ h1);
+        }
+
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            for (size_t j = 0; j < candidates.size(); ++j) {
+                if (i == j) continue;
+
+                auto& ant = candidates[i];
+                auto& con = candidates[j];
+
+                // Skip if this directed pair already has an IMPLICATION_LINK
+                size_t pairKey = ant->getHash() * kFibMul ^ con->getHash();
+                if (existingPairs.count(pairKey)) continue;
+
+                // Both must have non-zero confidence
+                float cB = TruthValue::getConfidence(con->getTruthValue());
+                if (cB <= 0.0f) continue;
+
+                // Apply PLN material-implication formula
+                Tensor impTV = TruthValue::implication(ant->getTruthValue(),
+                                                        con->getTruthValue());
+                float impStr = TruthValue::getStrength(impTV);
+                if (impStr < minImpStrength_) continue;
+
+                auto impLink = space.addLink(Atom::Type::IMPLICATION_LINK,
+                                             {ant, con});
+                impLink->setTruthValue(impTV);
+
+                if (std::find(workingSet.begin(), workingSet.end(), impLink) ==
+                        workingSet.end()) {
+                    workingSet.push_back(impLink);
+                }
+                existingPairs.insert(pairKey);
+            }
+        }
+
+        return evaluated || workingSet.size() > before;
+    }
+
+private:
+    float minAntStrength_;
+    float minImpStrength_;
+};
+
+/**
+ * PLNImplicationChainStep - Compute multi-hop transitive implication closure
+ * (Phase 13).
+ *
+ * While PLNDeductionStep applies the deduction rule to each *pair* of links in
+ * a single pass (producing one new link per matched pair), this step follows
+ * entire chains of IMPLICATION_LINKs up to @p maxDepth hops deep:
+ *
+ *   A→B, B→C, C→D  ─→  creates A→C, A→D, B→D  in one step
+ *
+ * The truth value of the chained link is computed by applying the PLN
+ * deduction formula (s1*s2, confidence formula) repeatedly along the chain.
+ * The chain TV is the minimum-confidence path, analogous to the weakest-link
+ * principle.
+ *
+ * Only IMPLICATION_LINKs with arity 2 and confidence > 0 are followed.
+ * Already-existing derived links are skipped to avoid redundant work.
+ */
+class PLNImplicationChainStep : public InferenceStep {
+public:
+    explicit PLNImplicationChainStep(int maxDepth = 3,
+                                     float minChainConfidence = 0.0f)
+        : maxDepth_(maxDepth)
+        , minChainConf_(minChainConfidence) {}
+
+    std::string getName() const override { return "PLNImplicationChain"; }
+
+    bool execute(std::vector<Atom::Handle>& workingSet,
+                 AtomSpace& space) override {
+        // Build adjacency: source-hash → list of (target-atom, link-TV)
+        std::unordered_map<size_t, Atom::Handle> hashToAtom;
+        std::unordered_map<size_t,
+            std::vector<std::pair<Atom::Handle, Tensor>>> adj;
+
+        for (const auto& a : workingSet) {
+            if (!a->isLink() ||
+                a->getType() != Atom::Type::IMPLICATION_LINK) continue;
+            const Link* l = static_cast<const Link*>(a.get());
+            if (l->getArity() != 2) continue;
+            if (TruthValue::getConfidence(a->getTruthValue()) <= 0.0f) continue;
+
+            auto src = l->getOutgoingAtom(0);
+            auto dst = l->getOutgoingAtom(1);
+            hashToAtom[src->getHash()] = src;
+            hashToAtom[dst->getHash()] = dst;
+            adj[src->getHash()].emplace_back(dst, a->getTruthValue());
+        }
+
+        if (adj.empty()) return false;
+
+        // Track existing pairs to avoid duplication (directed)
+        constexpr size_t kFibMul = 0x9e3779b97f4a7c15ULL;
+        std::unordered_set<size_t> existingPairs;
+        for (const auto& a : workingSet) {
+            if (!a->isLink() || a->getType() != Atom::Type::IMPLICATION_LINK) continue;
+            const Link* l = static_cast<const Link*>(a.get());
+            if (l->getArity() != 2) continue;
+            size_t h0 = l->getOutgoingAtom(0)->getHash();
+            size_t h1 = l->getOutgoingAtom(1)->getHash();
+            existingPairs.insert(h0 * kFibMul ^ h1);
+        }
+
+        size_t before = workingSet.size();
+
+        // BFS from each source atom, up to maxDepth_ hops
+        for (const auto& [startHash, startAtom] : hashToAtom) {
+            if (!adj.count(startHash)) continue;
+
+            // queue entries: (current-node-hash, accumulated-TV, depth)
+            using Entry = std::tuple<size_t, Tensor, int>;
+            std::vector<Entry> queue;
+            queue.emplace_back(startHash,
+                               TruthValue::create(1.0f, 1.0f), 0);
+
+            while (!queue.empty()) {
+                auto [curHash, accTV, depth] = queue.back();
+                queue.pop_back();
+
+                if (depth >= maxDepth_) continue;
+
+                auto it = adj.find(curHash);
+                if (it == adj.end()) continue;
+
+                for (const auto& [nextAtom, edgeTV] : it->second) {
+                    size_t nextHash = nextAtom->getHash();
+
+                    // Compose TV via deduction formula
+                    Tensor chainTV = (depth == 0)
+                        ? edgeTV
+                        : TruthValue::deduction(accTV, edgeTV);
+
+                    float chainConf = TruthValue::getConfidence(chainTV);
+                    if (chainConf < minChainConf_) continue;
+
+                    // Only create a derived link when depth >= 1
+                    // (depth 0 edges already exist in the working set)
+                    if (depth >= 1) {
+                        size_t pairKey = startHash * kFibMul ^ nextHash;
+                        if (!existingPairs.count(pairKey)) {
+                            auto chainLink = space.addLink(
+                                Atom::Type::IMPLICATION_LINK,
+                                {startAtom, nextAtom});
+                            chainLink->setTruthValue(chainTV);
+
+                            if (std::find(workingSet.begin(),
+                                          workingSet.end(),
+                                          chainLink) == workingSet.end()) {
+                                workingSet.push_back(chainLink);
+                            }
+                            existingPairs.insert(pairKey);
+                            // Update adjacency so further hops can use this
+                            adj[startHash].emplace_back(nextAtom, chainTV);
+                        }
+                    }
+
+                    queue.emplace_back(nextHash, chainTV, depth + 1);
+                }
+            }
+        }
+
+        return workingSet.size() > before;
+    }
+
+private:
+    int   maxDepth_;
+    float minChainConf_;
+};
+
+// ======================================================================== //
 //  Pipeline execution context and result                                     //
 // ======================================================================== //
 
@@ -916,6 +1164,20 @@ public:
     /** Append a PLN similarity step (Phase 12) */
     InferencePipeline& plnSimilarity(float minSimilarity = 0.5f) {
         return addStep(std::make_shared<PLNSimilarityStep>(minSimilarity));
+    }
+
+    /** Append a PLN implication step (Phase 13) */
+    InferencePipeline& plnImplication(float minAntecedentStrength  = 0.5f,
+                                      float minImplicationStrength = 0.5f) {
+        return addStep(std::make_shared<PLNImplicationStep>(
+            minAntecedentStrength, minImplicationStrength));
+    }
+
+    /** Append a PLN implication-chain step (Phase 13) */
+    InferencePipeline& plnImplicationChain(int   maxDepth         = 3,
+                                           float minChainConfidence = 0.0f) {
+        return addStep(std::make_shared<PLNImplicationChainStep>(
+            maxDepth, minChainConfidence));
     }
 
     // ------------------------------------------------------------------ //
@@ -1090,6 +1352,39 @@ inline InferencePipeline makePLNFullPipeline(
      .plnConjunction(minStrength)
      .plnDisjunction(minStrength)
      .plnSimilarity(minSimilarity)
+     .plnRevision()
+     .filterByTV(tvThreshold, minConfidence);
+    return p;
+}
+
+/**
+ * Create a complete PLN pipeline (Phase 13):
+ *   1. PLN deduction           — derive transitive implications A→C
+ *   2. PLN conjunction         — AND-combinations of high-strength atoms
+ *   3. PLN disjunction         — OR-combinations of qualifying atoms
+ *   4. PLN similarity          — SIMILARITY_LINKs between cognate atoms
+ *   5. PLN implication         — evaluate / create IMPLICATION_LINKs
+ *   6. PLN implication chain   — multi-hop transitive closure of implications
+ *   7. PLN revision            — merge duplicate truth values
+ *   8. Truth-value threshold   — discard atoms below the minimum
+ */
+inline InferencePipeline makePLNCompletePipeline(
+        AtomSpace& space,
+        float tvThreshold          = 0.0f,
+        float minConfidence        = 0.0f,
+        float minStrength          = 0.3f,
+        float minSimilarity        = 0.5f,
+        float minAntStrength       = 0.5f,
+        float minImpStrength       = 0.5f,
+        int   chainMaxDepth        = 3) {
+
+    InferencePipeline p(space);
+    p.plnDeduction(minConfidence)
+     .plnConjunction(minStrength)
+     .plnDisjunction(minStrength)
+     .plnSimilarity(minSimilarity)
+     .plnImplication(minAntStrength, minImpStrength)
+     .plnImplicationChain(chainMaxDepth, minConfidence)
      .plnRevision()
      .filterByTV(tvThreshold, minConfidence);
     return p;

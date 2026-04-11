@@ -5,12 +5,21 @@ cmake_minimum_required(VERSION 3.5)
 find_package(Torch REQUIRED)
 
 # Include directories
-# ${CMAKE_CURRENT_SOURCE_DIR} is aten/src/ATen/atomspace.
-# Going two levels up gives aten/src, which lets sources use
-# #include <ATen/atomspace/...> as an angle-bracket path.
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../..)
+# Ordering is critical: torch headers must appear before the legacy aten/src
+# tree so that torch's own ATen/Tensor.h (and friends) are found first.
+#
+# Background: without this ordering, the compiler resolves <ATen/Tensor.h>
+# to the legacy aten/src/ATen/Tensor.h which includes
+# <ATen/core/TensorMethods.h> — a file removed in PyTorch 2.x — causing
+# fatal "file not found" errors on modern torch installations.
+#
+# 1. Torch headers first — added as SYSTEM so modern headers shadow old ones.
+include_directories(SYSTEM ${TORCH_INCLUDE_DIRS})
+# 2. Local atomspace directory — regular -I for relative includes like
+#    #include "Atom.h" or #include <ATen/atomspace/Foo.h>.
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${TORCH_INCLUDE_DIRS})
+# 3. Legacy aten/src tree — added LAST as SYSTEM so it never shadows torch.
+include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 
 # Python bindings option
 option(BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
@@ -194,6 +203,11 @@ set_property(TARGET atomspace_test_phase11 PROPERTY CXX_STANDARD 17)
 add_executable(atomspace_test_phase12 test_phase12.cpp)
 target_link_libraries(atomspace_test_phase12 ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_phase12 PROPERTY CXX_STANDARD 17)
+
+# PLN implication completeness test (Phase 13)
+add_executable(atomspace_test_phase13 test_phase13.cpp)
+target_link_libraries(atomspace_test_phase13 ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_phase13 PROPERTY CXX_STANDARD 17)
 
 # Installation
 install(FILES 
