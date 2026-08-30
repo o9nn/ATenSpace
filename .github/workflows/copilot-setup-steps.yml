@@ -88,13 +88,15 @@ jobs:
             if [ -x "$t" ] && [ ! -d "$t" ]; then
               found=$((found + 1))
               echo "=== Running $t ==="
-              if timeout 60 "$t"; then
+              timeout 60 "$t"
+              rc=$?
+              if [ "$rc" -eq 0 ]; then
                 passed=$((passed + 1))
-              elif [ $? -eq 124 ]; then
+              elif [ "$rc" -eq 124 ]; then
                 echo "TIMEOUT: $t exceeded 60s"
                 hung=$((hung + 1))
               else
-                echo "FAILED: $t (exit $?)"
+                echo "FAILED: $t (exit $rc)"
                 failed=$((failed + 1))
               fi
             fi
