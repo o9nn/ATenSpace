@@ -120,6 +120,11 @@ add_executable(atomspace_test_ecan test_ecan.cpp)
 target_link_libraries(atomspace_test_ecan ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_ecan PROPERTY CXX_STANDARD 17)
 
+# ECAN minimal test executable
+add_executable(atomspace_test_ecan_minimal test_ecan_minimal.cpp)
+target_link_libraries(atomspace_test_ecan_minimal ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_ecan_minimal PROPERTY CXX_STANDARD 17)
+
 # Cognitive Engine test executable
 add_executable(atomspace_test_cognitive test_cognitive.cpp)
 target_link_libraries(atomspace_test_cognitive ${TORCH_LIBRARIES})
