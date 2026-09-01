@@ -29,6 +29,10 @@
 namespace py = pybind11;
 using namespace at::atomspace;
 
+// VariableMap: string-keyed map of atoms used by the pattern-matching
+// bindings.  Defined here (bindings-local) since no C++ header exports it.
+using VariableMap = std::unordered_map<std::string, Atom::Handle>;
+
 // Module definition
 PYBIND11_MODULE(atenspace, m) {
     m.doc() = "ATenSpace - Tensor-based Cognitive Architecture";
@@ -51,6 +55,7 @@ PYBIND11_MODULE(atenspace, m) {
         .value("AND_LINK", Atom::Type::AND_LINK)
         .value("OR_LINK", Atom::Type::OR_LINK)
         .value("NOT_LINK", Atom::Type::NOT_LINK)
+        .value("ABSENT_LINK", Atom::Type::ABSENT_LINK)
         .value("MEMBER_LINK", Atom::Type::MEMBER_LINK)
         .value("SUBSET_LINK", Atom::Type::SUBSET_LINK)
         .value("SEQUENTIAL_LINK", Atom::Type::SEQUENTIAL_LINK)
@@ -90,15 +95,15 @@ PYBIND11_MODULE(atenspace, m) {
 
     // Link class
     py::class_<Link, Atom, std::shared_ptr<Link>>(m, "Link")
-        .def(py::init<Atom::Type, const std::vector<AtomPtr>&>(),
+        .def(py::init<Atom::Type, const std::vector<Atom::Handle>&>(),
              py::arg("type"), py::arg("outgoing"));
 
     // AtomSpace class
     py::class_<AtomSpace>(m, "AtomSpace")
         .def(py::init<>())
-        .def("add_node", static_cast<NodePtr(AtomSpace::*)(Atom::Type, const std::string&)>(&AtomSpace::addNode),
+        .def("add_node", static_cast<Atom::Handle(AtomSpace::*)(Atom::Type, const std::string&)>(&AtomSpace::addNode),
              py::arg("type"), py::arg("name"))
-        .def("add_node", static_cast<NodePtr(AtomSpace::*)(Atom::Type, const std::string&, const Tensor&)>(&AtomSpace::addNode),
+        .def("add_node", static_cast<Atom::Handle(AtomSpace::*)(Atom::Type, const std::string&, const Tensor&)>(&AtomSpace::addNode),
              py::arg("type"), py::arg("name"), py::arg("embedding"))
         .def("add_link", &AtomSpace::addLink,
              py::arg("type"), py::arg("outgoing"))
@@ -114,11 +119,11 @@ PYBIND11_MODULE(atenspace, m) {
         .def("__len__", &AtomSpace::size);
 
     // Helper functions for creating atoms
-    m.def("create_concept_node", 
-          static_cast<NodePtr(*)(AtomSpace&, const std::string&)>(&createConceptNode),
+    m.def("create_concept_node",
+          static_cast<Atom::Handle(*)(AtomSpace&, const std::string&)>(&createConceptNode),
           py::arg("space"), py::arg("name"));
-    m.def("create_concept_node", 
-          static_cast<NodePtr(*)(AtomSpace&, const std::string&, const Tensor&)>(&createConceptNode),
+    m.def("create_concept_node",
+          static_cast<Atom::Handle(*)(AtomSpace&, const std::string&, const Tensor&)>(&createConceptNode),
           py::arg("space"), py::arg("name"), py::arg("embedding"));
     m.def("create_predicate_node", &createPredicateNode,
           py::arg("space"), py::arg("name"));
@@ -136,6 +141,10 @@ PYBIND11_MODULE(atenspace, m) {
           py::arg("space"), py::arg("atoms"));
     m.def("create_not_link", &createNotLink,
           py::arg("space"), py::arg("atom"));
+    m.def("create_absent_link", &createAbsentLink,
+          py::arg("space"), py::arg("atom"),
+          "Create an AbsentLink (negation-as-failure): the wrapped pattern is "
+          "asserted to have no match anywhere in the AtomSpace at query time.");
 
     // ============================================================
     // TIME SERVER
@@ -216,7 +225,7 @@ PYBIND11_MODULE(atenspace, m) {
             if (it == vm.end()) throw py::key_error("Variable not found: " + key);
             return it->second;
         })
-        .def("__setitem__", [](VariableMap& vm, const std::string& key, AtomPtr value) {
+        .def("__setitem__", [](VariableMap& vm, const std::string& key, Atom::Handle value) {
             vm[key] = value;
         })
         .def("__contains__", [](const VariableMap& vm, const std::string& key) {
@@ -377,6 +386,15 @@ PYBIND11_MODULE(atenspace, m) {
             py::arg("atom"), "True if atom is a TypedVariableNode.")
         .def_static("is_glob", &PatternMatcher::isGlob,
             py::arg("atom"), "True if atom is a GlobNode.")
+        .def_static("is_absent", &PatternMatcher::isAbsent,
+            py::arg("atom"), "True if atom is an AbsentLink (negation-as-failure).")
+        // find_absent(space, absent_link) → list[atom]
+        .def_static("find_absent",
+            [](AtomSpace& space, const Atom::Handle& absent) {
+                return PatternMatcher::findAbsent(space, absent);
+            }, py::arg("space"), py::arg("absent_link"),
+            "Negation-as-failure: return all atoms for which the AbsentLink's "
+            "inner pattern has NO match anywhere in the AtomSpace.")
         .def_static("get_type_constraint", &PatternMatcher::getTypeConstraint,
             py::arg("atom"),
             "Return the type-constraint string for a TypedVariableNode.")
@@ -762,7 +780,7 @@ PYBIND11_MODULE(atenspace, m) {
           "Load a BPETokenizer (GPT-2) from a directory containing vocab.json + merges.txt");
 
     // Module version
-    m.attr("__version__") = "0.13.0";
+    m.attr("__version__") = "0.14.0";
 
     // ============================================================
     // PHASE 9 + 10 BINDINGS

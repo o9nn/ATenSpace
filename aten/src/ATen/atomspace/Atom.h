@@ -45,6 +45,7 @@ public:
         AND_LINK,
         OR_LINK,
         NOT_LINK,
+        ABSENT_LINK,   // Negation-as-failure: succeeds iff inner pattern has no match in the space
         // Set membership links
         MEMBER_LINK,
         SUBSET_LINK,
@@ -102,6 +103,20 @@ public:
     virtual void setEmbedding(const Tensor& embedding) { (void)embedding; }
     virtual Tensor getEmbedding() const { return Tensor(); }
     virtual bool hasEmbedding() const { return false; }
+
+    /// Arity of the atom (Links: outgoing-set size; Nodes: 0).
+    virtual size_t getArity() const { return 0; }
+
+    /// Live incoming atoms (weak references resolved).  Links/nodes that
+    /// reference this atom.  Expired weak references are dropped.
+    std::vector<Handle> getIncoming() const {
+        std::vector<Handle> live;
+        live.reserve(incoming_set_.size());
+        for (const auto& w : incoming_set_) {
+            if (auto h = w.lock()) live.push_back(h);
+        }
+        return live;
+    }
 
     // Truth value (stored as tensor for flexible representation)
     void setTruthValue(const Tensor& tv) { truth_value_ = tv; }
@@ -195,6 +210,11 @@ private:
     Tensor embedding_;
 };
 
+// Convenience shared-pointer aliases used throughout the bindings and
+// consumer code.
+using AtomPtr = std::shared_ptr<Atom>;
+using NodePtr = std::shared_ptr<Node>;
+
 /**
  * Link - Represents a relationship between atoms
  * 
@@ -224,6 +244,7 @@ public:
             case Type::AND_LINK: return "AndLink";
             case Type::OR_LINK: return "OrLink";
             case Type::NOT_LINK: return "NotLink";
+            case Type::ABSENT_LINK: return "AbsentLink";
             case Type::MEMBER_LINK: return "MemberLink";
             case Type::SUBSET_LINK: return "SubsetLink";
             case Type::CONTEXT_LINK: return "ContextLink";
@@ -241,7 +262,7 @@ public:
     const OutgoingSet& getOutgoingSet() const { return outgoing_; }
     // Uniform base interface: expose outgoing set via the virtual accessor.
     const OutgoingSet& getOutgoing() const override { return outgoing_; }
-    size_t getArity() const { return outgoing_.size(); }
+    size_t getArity() const override { return outgoing_.size(); }
     
     Handle getOutgoingAtom(size_t index) const {
         if (index < outgoing_.size()) {
@@ -284,6 +305,8 @@ private:
     Type type_;
     OutgoingSet outgoing_;
 };
+
+using LinkPtr = std::shared_ptr<Link>;
 
 } // namespace atomspace
 } // namespace at

@@ -244,6 +244,48 @@ public:
                atom->getType() == Atom::Type::GLOB_NODE;
     }
 
+    /** Check if an atom is an AbsentLink (negation-as-failure wrapper) */
+    static bool isAbsent(const Atom::Handle& atom) {
+        return atom->isLink() &&
+               atom->getType() == Atom::Type::ABSENT_LINK;
+    }
+
+    /**
+     * Negation-as-failure query.
+     *
+     * Given an AbsentLink wrapping a single inner pattern, return every atom
+     * in `space` for which the inner pattern has NO match anywhere in the
+     * space.  This implements AbsentLink/NotExists semantics at the query
+     * level (as opposed to NOT_LINK, which negates a single pattern/target
+     * pair).
+     *
+     * @param space    AtomSpace to search
+     * @param absent   An AbsentLink whose sole outgoing atom is the inner pattern
+     * @return Atoms for which the inner pattern is absent from the space
+     */
+    static std::vector<Atom::Handle>
+    findAbsent(AtomSpace& space, const Atom::Handle& absent) {
+        std::vector<Atom::Handle> results;
+        if (!isAbsent(absent)) return results;
+
+        const Link* link = static_cast<const Link*>(absent.get());
+        if (link->getArity() != 1) return results;
+
+        const Atom::Handle& inner = link->getOutgoingAtom(0);
+
+        // Collect every atom for which the inner pattern does NOT match.
+        // Variables in the inner pattern are treated as wildcards, so if ANY
+        // atom matches the inner pattern the absence fails for that candidate.
+        auto all = space.getAtoms();
+        for (const auto& candidate : all) {
+            VariableBinding bindings;
+            if (!match(inner, candidate, bindings)) {
+                results.push_back(candidate);
+            }
+        }
+        return results;
+    }
+
     /**
      * Return the type-name constraint encoded in a TypedVariableNode.
      * E.g. a node named "?X:ConceptNode" returns "ConceptNode".
