@@ -100,7 +100,21 @@ public:
         }
         updateAttentionalFocus();
     }
-    
+
+    /**
+     * Set STI for an atom (alias for updateSTI; Iteration 1 FR-1.3 surface).
+     */
+    void setSTI(Handle atom, float sti) { updateSTI(atom, sti); }
+
+    /** Get STI for an atom (0.0 if untracked). */
+    float getSTI(Handle atom) const { return getAttentionValue(atom).sti; }
+
+    /** Set LTI for an atom (alias for updateLTI). */
+    void setLTI(Handle atom, float lti) { updateLTI(atom, lti); }
+
+    /** Get LTI for an atom (0.0 if untracked). */
+    float getLTI(Handle atom) const { return getAttentionValue(atom).lti; }
+
     /**
      * Update LTI for an atom
      */
@@ -324,6 +338,12 @@ private:
     size_t max_af_size_;
     float min_sti_threshold_;
 };
+
+/**
+ * Convenience alias so downstream code (ATenNN, bindings) can refer to
+ * `AttentionValue` without the `AttentionBank::` qualification.
+ */
+using AttentionValue = AttentionBank::AttentionValue;
 
 } // namespace atomspace
 } // namespace at

@@ -216,54 +216,71 @@ public:
  */
 class ForwardChainer {
 public:
-    ForwardChainer(AtomSpace& space) 
-        : space_(space), maxIterations_(100), confidenceThreshold_(0.1f) {
+    ForwardChainer(AtomSpace& space)
+        : space_(space), maxIterations_(100), confidenceThreshold_(0.1f),
+          maxSteps_(10000) {
         // Register default rules
         addRule(std::make_shared<DeductionRule>());
         addRule(std::make_shared<InductionRule>());
         addRule(std::make_shared<AbductionRule>());
     }
-    
+
     /**
      * Add an inference rule
      */
     void addRule(std::shared_ptr<InferenceRule> rule) {
         rules_.push_back(rule);
     }
-    
+
     /**
      * Set maximum iterations
      */
     void setMaxIterations(int maxIter) {
         maxIterations_ = maxIter;
     }
-    
+
     /**
      * Set minimum confidence threshold for new conclusions
      */
     void setConfidenceThreshold(float threshold) {
         confidenceThreshold_ = threshold;
     }
-    
+
     /**
-     * Run forward chaining to exhaustion or max iterations
-     * 
+     * Set the global step budget (Iteration 1, FR-1.4).
+     *
+     * A hard cap on the total number of rule applications across a run,
+     * guaranteeing termination even on cyclic or densely connected
+     * knowledge bases.
+     */
+    void setMaxSteps(int maxSteps) { maxSteps_ = maxSteps; }
+    int getMaxSteps() const { return maxSteps_; }
+
+    /**
+     * Run forward chaining to exhaustion, max iterations, or step budget.
+     *
      * @param attentionBank Optional attention bank for priority guidance
      * @return Number of new atoms created
      */
     int run(AttentionBank* attentionBank = nullptr) {
         int totalNewAtoms = 0;
-        
+        int stepsUsed = 0;
+
         for (int iteration = 0; iteration < maxIterations_; ++iteration) {
-            int newAtomsThisIteration = performIteration(attentionBank);
+            int newAtomsThisIteration =
+                performIteration(attentionBank, nullptr, stepsUsed);
             totalNewAtoms += newAtomsThisIteration;
-            
-            // Stop if no new atoms were created
+
+            // Stop if no new atoms were created (fixpoint / cycle guard)
             if (newAtomsThisIteration == 0) {
                 break;
             }
+            // Stop if the global step budget is exhausted
+            if (stepsUsed >= maxSteps_) {
+                break;
+            }
         }
-        
+
         return totalNewAtoms;
     }
     
@@ -275,7 +292,8 @@ public:
      * @return Number of new atoms created
      */
     int step(Atom::Handle target = nullptr, AttentionBank* attentionBank = nullptr) {
-        return performIteration(attentionBank, target);
+        int stepsUsed = 0;
+        return performIteration(attentionBank, target, stepsUsed);
     }
     
     /**
@@ -308,10 +326,11 @@ private:
     /**
      * Perform one iteration of forward chaining
      */
-    int performIteration(AttentionBank* attentionBank, Atom::Handle target = nullptr) {
-        int newAtoms = 0;
+    int performIteration(AttentionBank* attentionBank,
+                         Atom::Handle target,
+                         int& stepsUsed) {
         size_t initialSize = space_.size();
-        
+
         // Get all atoms, optionally sorted by attention
         std::vector<Atom::Handle> atoms;
         if (attentionBank) {
@@ -329,24 +348,33 @@ private:
             auto atomSet = space_.getAtoms();
             atoms.assign(atomSet.begin(), atomSet.end());
         }
-        
-        // Try to apply rules to pairs of atoms
+
+        // Try to apply rules to pairs of atoms.  Two guards ensure
+        // termination (FR-1.4):
+        //  - a per-iteration cap on newly created atoms, and
+        //  - the shared global step budget `stepsUsed` / maxSteps_.
+        // Because addLink is idempotent, cyclic rule applications stop
+        // producing new atoms once every derivable link already exists.
+        int newAtoms = 0;
         for (size_t i = 0; i < atoms.size() && newAtoms < 100; ++i) {
             for (size_t j = i + 1; j < atoms.size() && newAtoms < 100; ++j) {
+                if (stepsUsed >= maxSteps_) break;
+                ++stepsUsed;
+
                 std::vector<Atom::Handle> premises = {atoms[i], atoms[j]};
-                
                 auto conclusions = applyRules(premises);
                 newAtoms += conclusions.size();
             }
         }
-        
-        return space_.size() - initialSize;
+
+        return static_cast<int>(space_.size() - initialSize);
     }
-    
+
     AtomSpace& space_;
     std::vector<std::shared_ptr<InferenceRule>> rules_;
     int maxIterations_;
     float confidenceThreshold_;
+    int maxSteps_;
 };
 
 } // namespace atomspace

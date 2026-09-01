@@ -32,6 +32,27 @@ using VariableBinding = std::unordered_map<Atom::Handle, Atom::Handle>;
 class PatternMatcher {
 public:
     /**
+     * VariableBinding - Maps variable nodes to their bound values.
+     * (Exposed as a nested alias so consumers can write
+     *  `PatternMatcher::VariableBinding`; same type as the
+     *  namespace-level `at::atomspace::VariableBinding`.)
+     */
+    using VariableBinding = at::atomspace::VariableBinding;
+
+    /**
+     * MatchCallback - Invoked for every complete match (Iteration 1, FR-1.1).
+     *
+     * Signature: void(const Atom::Handle& matchedAtom,
+     *                 const VariableBinding& bindings)
+     *
+     * Enables streaming consumers (InferencePipeline, CognitiveEngine)
+     * to process matches one at a time without materializing the full
+     * result set.
+     */
+    using MatchCallback =
+        std::function<void(const Atom::Handle&, const VariableBinding&)>;
+
+    /**
      * Match a pattern against a target atom.
      *
      * Phase 10 additions:
@@ -111,16 +132,83 @@ public:
     findMatches(AtomSpace& space, const Atom::Handle& pattern) {
         std::vector<std::pair<Atom::Handle, VariableBinding>> results;
 
-        auto candidates = getCandidates(space, pattern);
+        forEachMatch(space, pattern,
+            [&results](const Atom::Handle& atom, const VariableBinding& bindings) {
+                results.push_back({atom, bindings});
+            });
 
+        return results;
+    }
+
+    /**
+     * Stream matches to a callback instead of materializing a result set
+     * (Iteration 1, FR-1.1).
+     *
+     * The callback is invoked once for every complete match.  When the
+     * pattern is an ABSENT_LINK, the enclosed pattern is evaluated as
+     * negation-as-failure: the callback fires exactly once (with empty
+     * bindings) iff the enclosed pattern yields zero matches, and does
+     * not fire otherwise.  No atoms are added or removed — the space is
+     * unchanged (FR-1.2).
+     *
+     * @param space    AtomSpace to search
+     * @param pattern  Pattern to match
+     * @param callback MatchCallback invoked per complete match
+     * @return Number of matches dispatched
+     */
+    static size_t forEachMatch(AtomSpace& space,
+                               const Atom::Handle& pattern,
+                               MatchCallback callback) {
+        // Negation-as-failure: ABSENT_LINK wraps one inner pattern and
+        // succeeds iff the inner pattern yields zero matches.
+        if (pattern->isLink() &&
+                pattern->getType() == Atom::Type::ABSENT_LINK) {
+            const Link* absentLink = static_cast<const Link*>(pattern.get());
+            if (absentLink->getArity() == 1) {
+                const Atom::Handle& inner = absentLink->getOutgoingAtom(0);
+                if (!existsMatch(space, inner)) {
+                    VariableBinding empty;
+                    callback(pattern, empty);
+                    return 1;
+                }
+            }
+            return 0;
+        }
+
+        size_t count = 0;
+        auto candidates = getCandidates(space, pattern);
         for (const auto& candidate : candidates) {
             VariableBinding bindings;
             if (match(pattern, candidate, bindings)) {
-                results.push_back({candidate, bindings});
+                callback(candidate, bindings);
+                ++count;
             }
         }
+        return count;
+    }
 
-        return results;
+    /**
+     * Return true if at least one atom in the space matches the pattern.
+     * Short-circuits on the first match (no side effects).
+     */
+    static bool existsMatch(AtomSpace& space, const Atom::Handle& pattern) {
+        // ABSENT_LINK inside existsMatch: present iff inner is absent.
+        if (pattern->isLink() &&
+                pattern->getType() == Atom::Type::ABSENT_LINK) {
+            const Link* absentLink = static_cast<const Link*>(pattern.get());
+            if (absentLink->getArity() == 1) {
+                return !existsMatch(space, absentLink->getOutgoingAtom(0));
+            }
+            return false;
+        }
+        auto candidates = getCandidates(space, pattern);
+        for (const auto& candidate : candidates) {
+            VariableBinding bindings;
+            if (match(pattern, candidate, bindings)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -359,6 +447,18 @@ private:
 
         // For globs, return all atoms
         if (isGlob(pattern)) {
+            const auto& allAtoms = space.getAtoms();
+            candidates.insert(candidates.end(), allAtoms.begin(), allAtoms.end());
+            return candidates;
+        }
+
+        // Negation patterns (NOT_LINK / ABSENT_LINK) must consider every
+        // atom as a candidate: the whole point is to match atoms that do
+        // NOT satisfy the inner pattern, so filtering by the negation
+        // link's own type would wrongly yield zero candidates.
+        if (pattern->isLink() &&
+            (pattern->getType() == Atom::Type::NOT_LINK ||
+             pattern->getType() == Atom::Type::ABSENT_LINK)) {
             const auto& allAtoms = space.getAtoms();
             candidates.insert(candidates.end(), allAtoms.begin(), allAtoms.end());
             return candidates;

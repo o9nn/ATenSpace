@@ -150,7 +150,24 @@ public:
         }
         return std::chrono::system_clock::now();
     }
-    
+
+    /**
+     * Get last modified time for an atom (alias for Python bindings).
+     */
+    TimePoint getLastModificationTime(Handle atom) const {
+        return getLastModifiedTime(atom);
+    }
+
+    /**
+     * Check whether an atom has a recorded creation time (Iteration 1, T1.6).
+     * Used by CognitiveEngine to stamp only newly created atoms.
+     */
+    bool hasCreationTime(Handle atom) const {
+        if (!atom) return false;
+        std::lock_guard<std::mutex> lock(mutex_);
+        return temporal_info_.find(atom) != temporal_info_.end();
+    }
+
     /**
      * Get event history for an atom
      */
