@@ -67,31 +67,21 @@ public:
      */
     std::vector<Handle> getHebbianLinks(Handle atom) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        
-        std::vector<Handle> links;
-        auto incoming = atom->getIncomingSet();
-        
-        for (const auto& weak_link : incoming) {
-            if (auto link = weak_link.lock()) {
-                auto type = link->getType();
-                if (isHebbianLinkType(type)) {
-                    links.push_back(link);
-                }
-            }
-        }
-        
-        return links;
+        return getHebbianLinksLocked(atom);
     }
-    
+
     /**
      * Get atoms connected by Hebbian links to the given atom
      */
     std::vector<std::pair<Handle, float>> getHebbianNeighbors(Handle atom) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        
+
         std::vector<std::pair<Handle, float>> neighbors;
-        auto links = getHebbianLinks(atom);
-        
+        // Use the lock-free helper: this method already holds mutex_, and
+        // getHebbianLinks() would re-lock the same non-recursive mutex,
+        // causing a self-deadlock (the ECAN runCycle hang).
+        auto links = getHebbianLinksLocked(atom);
+
         for (const auto& link : links) {
             if (auto link_ptr = std::dynamic_pointer_cast<Link>(link)) {
                 auto outgoing = link_ptr->getOutgoingSet();
@@ -126,18 +116,39 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         
         size_t count = 0;
-        auto all_atoms = space_.getAtomsByType(Atom::Type::LINK);
-        
-        for (const auto& atom : all_atoms) {
-            if (isHebbianLinkType(atom->getType())) {
+        // Hebbian links have their own dedicated types (HEBBIAN_LINK,
+        // SYMMETRIC_HEBBIAN_LINK, ...), not the generic LINK type, so we must
+        // scan all atoms and filter by isHebbianLinkType rather than rely on
+        // getAtomsByType(Atom::Type::LINK).
+        for (const auto& atom : space_.getAtoms()) {
+            if (atom->isLink() && isHebbianLinkType(atom->getType())) {
                 count++;
             }
         }
-        
+
         return count;
     }
 
 private:
+    /**
+     * Lock-free Hebbian-link collection.  Caller must hold mutex_.
+     */
+    std::vector<Handle> getHebbianLinksLocked(Handle atom) const {
+        std::vector<Handle> links;
+        auto incoming = atom->getIncomingSet();
+
+        for (const auto& weak_link : incoming) {
+            if (auto link = weak_link.lock()) {
+                auto type = link->getType();
+                if (isHebbianLinkType(type)) {
+                    links.push_back(link);
+                }
+            }
+        }
+
+        return links;
+    }
+
     /**
      * Check if a type is a Hebbian link type
      */
@@ -318,11 +329,13 @@ public:
     void forget() {
         std::lock_guard<std::mutex> lock(mutex_);
         
-        // Get all atoms being tracked
-        auto all_atoms = space_.getAtomsByType(Atom::Type::NODE);
-        auto all_links = space_.getAtomsByType(Atom::Type::LINK);
-        all_atoms.insert(all_atoms.end(), all_links.begin(), all_links.end());
-        
+        // Get all atoms being tracked.  Concrete atoms use specific types
+        // (CONCEPT_NODE, INHERITANCE_LINK, ...), not the abstract NODE/LINK
+        // enum values, so query the full atom set rather than
+        // getAtomsByType(NODE/LINK) which would miss them.
+        auto atom_set = space_.getAtoms();
+        std::vector<Handle> all_atoms(atom_set.begin(), atom_set.end());
+
         std::vector<Handle> to_remove;
         
         for (const auto& atom : all_atoms) {
@@ -382,13 +395,19 @@ private:
         if (av.sti > MIN_STI_FOR_PROTECTION) {
             return false;
         }
-        
-        // Check if in attentional focus
-        auto focus = attention_bank_.getAttentionalFocus();
-        if (std::find(focus.begin(), focus.end(), atom) != focus.end()) {
-            return false;
+
+        // Check if in attentional focus.  Only treat focus membership as
+        // protection when the atom is actively attended (above the STI
+        // protection floor); otherwise the default focus (threshold 0) would
+        // sweep in nearly every atom and nothing below the LTI threshold
+        // could ever be forgotten.
+        if (av.sti > MIN_STI_FOR_PROTECTION) {
+            auto focus = attention_bank_.getAttentionalFocus();
+            if (std::find(focus.begin(), focus.end(), atom) != focus.end()) {
+                return false;
+            }
         }
-        
+
         return true;
     }
     
