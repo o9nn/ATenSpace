@@ -9,6 +9,11 @@
 namespace at {
 namespace atomspace {
 
+// Re-export at::Tensor into at::atomspace so that code doing
+// `using namespace at::atomspace;` can refer to `Tensor` unqualified at
+// file/function scope (a very common pattern in the examples and tests).
+using at::Tensor;
+
 // Forward declarations
 class AtomSpace;
 
@@ -72,7 +77,32 @@ public:
     
     // Identity
     size_t getHash() const { return hash_; }
-    
+
+    // ------------------------------------------------------------------
+    // Uniform base-class conveniences.
+    //
+    // These provide a common interface on the Atom base so that generic
+    // algorithms (NLU generation, vision grounding, tensor engines, neural
+    // bridges) can operate on `Atom::Handle` without downcasting.  The base
+    // implementations return safe defaults; Node/Link override the ones that
+    // are meaningful for them.  This resolves API drift where consumer code
+    // was written against a richer base interface.
+    // ------------------------------------------------------------------
+
+    /// Name of the atom (Nodes only; empty string for links).
+    virtual std::string getName() const { return ""; }
+
+    /// Ordered outgoing set (Links only; empty for nodes).
+    virtual const std::vector<Handle>& getOutgoing() const {
+        static const std::vector<Handle> kEmpty;
+        return kEmpty;
+    }
+
+    /// Tensor embedding accessors (meaningful for Nodes; no-op on links).
+    virtual void setEmbedding(const Tensor& embedding) { (void)embedding; }
+    virtual Tensor getEmbedding() const { return Tensor(); }
+    virtual bool hasEmbedding() const { return false; }
+
     // Truth value (stored as tensor for flexible representation)
     void setTruthValue(const Tensor& tv) { truth_value_ = tv; }
     Tensor getTruthValue() const { return truth_value_; }
@@ -141,13 +171,13 @@ public:
     
     bool isNode() const override { return true; }
     bool isLink() const override { return false; }
-    
-    std::string getName() const { return name_; }
-    
+
+    std::string getName() const override { return name_; }
+
     // Tensor embedding for the node
-    void setEmbedding(const Tensor& embedding) { embedding_ = embedding; }
-    Tensor getEmbedding() const { return embedding_; }
-    bool hasEmbedding() const { return embedding_.defined(); }
+    void setEmbedding(const Tensor& embedding) override { embedding_ = embedding; }
+    Tensor getEmbedding() const override { return embedding_; }
+    bool hasEmbedding() const override { return embedding_.defined(); }
     
     std::string toString() const override {
         return "(" + getTypeName() + " \"" + name_ + "\")";
@@ -207,8 +237,10 @@ public:
     
     bool isNode() const override { return false; }
     bool isLink() const override { return true; }
-    
+
     const OutgoingSet& getOutgoingSet() const { return outgoing_; }
+    // Uniform base interface: expose outgoing set via the virtual accessor.
+    const OutgoingSet& getOutgoing() const override { return outgoing_; }
     size_t getArity() const { return outgoing_.size(); }
     
     Handle getOutgoingAtom(size_t index) const {

@@ -32,12 +32,14 @@ static int tests_run    = 0;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
-#define RUN_TEST(name, body)                                        \
+// Variadic so the test body may contain commas (e.g. structured bindings,
+// initializer lists, multi-arg calls) without being split by the preprocessor.
+#define RUN_TEST(name, ...)                                         \
     do {                                                            \
         ++tests_run;                                                \
         std::cout << "  [TEST] " << name << " ... " << std::flush; \
         try {                                                        \
-            body                                                    \
+            __VA_ARGS__                                             \
             std::cout << "PASS\n";                                  \
             ++tests_passed;                                         \
         } catch (const std::exception& e) {                        \

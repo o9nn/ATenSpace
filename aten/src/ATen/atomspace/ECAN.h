@@ -605,5 +605,46 @@ private:
     size_t cycle_count_;
 };
 
+/**
+ * ECAN - Convenience facade over the ECAN agent suite.
+ *
+ * CognitiveEngine and several examples reference a single `ECAN` object that
+ * can be constructed from an AttentionBank alone and stepped via runCycle().
+ * This facade owns an internal AtomSpace when one is not supplied, wires up
+ * the individual agents (Hebbian, spreading, forgetting, rent, wage), and
+ * forwards the small configuration surface consumers rely on
+ * (setForgettingThreshold).  For full control use ECANManager directly.
+ */
+class ECAN {
+public:
+    using Handle = Atom::Handle;
+
+    explicit ECAN(AttentionBank& bank)
+        : owned_space_(std::make_shared<AtomSpace>()),
+          manager_(*owned_space_, bank) {}
+
+    ECAN(AtomSpace& space, AttentionBank& bank)
+        : owned_space_(nullptr),
+          manager_(space, bank) {}
+
+    /// Run one full ECAN cycle.
+    void runCycle() { manager_.runCycle(); }
+
+    /// Configure the forgetting threshold (maps to the LTI threshold).
+    void setForgettingThreshold(float threshold) {
+        manager_.getForgettingAgent().setLTIThreshold(threshold);
+    }
+
+    /// Pay a wage to an atom that was useful in a cognitive process.
+    void payWage(Handle atom) { manager_.payWage(atom); }
+
+    /// Access the underlying manager for advanced configuration.
+    ECANManager& getManager() { return manager_; }
+
+private:
+    std::shared_ptr<AtomSpace> owned_space_; // non-null when self-owned
+    ECANManager manager_;
+};
+
 } // namespace atomspace
 } // namespace at

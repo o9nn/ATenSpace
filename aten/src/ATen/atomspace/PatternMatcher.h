@@ -31,6 +31,9 @@ using VariableBinding = std::unordered_map<Atom::Handle, Atom::Handle>;
  */
 class PatternMatcher {
 public:
+    /// Nested alias so consumers can write PatternMatcher::VariableBinding.
+    using VariableBinding = ::at::atomspace::VariableBinding;
+
     /**
      * Match a pattern against a target atom.
      *

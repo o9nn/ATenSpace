@@ -72,6 +72,29 @@ public:
     }
     
     /**
+     * Set the STI component for an atom, preserving LTI and VLTI.
+     * Convenience used by PLN/ECAN examples and neural attention bridges.
+     */
+    void setSTI(Handle atom, float sti) {
+        if (!atom) return;
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto& av = attention_values_[atom];
+        av.sti = sti;
+        updateAttentionalFocus();
+    }
+
+    /**
+     * Set the LTI component for an atom, preserving STI and VLTI.
+     */
+    void setLTI(Handle atom, float lti) {
+        if (!atom) return;
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto& av = attention_values_[atom];
+        av.lti = lti;
+        updateAttentionalFocus();
+    }
+
+    /**
      * Stimulate an atom (increase STI)
      */
     void stimulate(Handle atom, float amount) {
@@ -282,13 +305,27 @@ public:
     }
     
     /**
+     * Get the STI (short-term importance) for an atom.
+     */
+    float getSTI(Handle atom) const {
+        return getAttentionValue(atom).sti;
+    }
+
+    /**
+     * Get the LTI (long-term importance) for an atom.
+     */
+    float getLTI(Handle atom) const {
+        return getAttentionValue(atom).lti;
+    }
+
+    /**
      * Get number of atoms being tracked
      */
     size_t size() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return attention_values_.size();
     }
-    
+
 private:
     /**
      * Update the attentional focus based on current STI values
@@ -324,6 +361,10 @@ private:
     size_t max_af_size_;
     float min_sti_threshold_;
 };
+
+// Namespace-level alias so consumers can write `AttentionValue(...)`
+// unqualified instead of `AttentionBank::AttentionValue(...)`.
+using AttentionValue = AttentionBank::AttentionValue;
 
 } // namespace atomspace
 } // namespace at
