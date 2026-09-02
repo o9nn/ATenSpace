@@ -488,7 +488,11 @@ private:
                     // Deduction pairs are deferred to the batch path.
                     if (deductionRule && rule == deductionRule) {
                         if (rule->canApply(premises)) {
+                            // Try both orientations: deduction only fires
+                            // when the pair chains as (A→B, B→C), which
+                            // depends on iteration order over the atom set.
                             deductionPairs.emplace_back(atoms[i], atoms[j]);
+                            deductionPairs.emplace_back(atoms[j], atoms[i]);
                         }
                         continue;
                     }
@@ -507,28 +511,26 @@ private:
         }
 
         // Offload the collected deduction pairs to the vectorised path.
+        // The iteration cap is driven by the number of genuinely new atoms
+        // (space size delta), not by how many conclusions pass the
+        // confidence filter, so cyclic rule applications still terminate.
         if (deductionRule &&
             deductionPairs.size() >= minBatchSize_) {
-            auto conclusions =
-                deductionRule->applyBatch(deductionPairs, space_,
-                                          *tensorLogic_);
-            for (const auto& conclusion : conclusions) {
-                float conf =
-                    TruthValue::getConfidence(conclusion->getTruthValue());
-                if (conf >= confidenceThreshold_) {
-                    ++newAtoms;
-                }
-            }
+            size_t before = space_.size();
+            deductionRule->applyBatch(deductionPairs, space_, *tensorLogic_);
+            newAtoms += static_cast<int>(space_.size() - before);
         } else {
             // Scalar fallback for small batches or when offload is disabled.
             for (const auto& pair : deductionPairs) {
                 std::vector<Atom::Handle> premises = {pair.first,
                                                       pair.second};
+                size_t before = space_.size();
                 auto conclusions = deductionRule->apply(premises, space_);
                 for (const auto& conclusion : conclusions) {
                     float conf = TruthValue::getConfidence(
                         conclusion->getTruthValue());
-                    if (conf >= confidenceThreshold_) {
+                    if (conf >= confidenceThreshold_ &&
+                        space_.size() > before) {
                         ++newAtoms;
                     }
                 }
