@@ -241,30 +241,6 @@ public:
     size_t getNumAtoms() const { return size(); }
 
     /**
-     * Retrieve a link by type and outgoing set, or nullptr if absent.
-     */
-    Handle getLink(Atom::Type type, const std::vector<Handle>& outgoing) const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        Link probe(type, outgoing);
-        size_t hash = probe.getHash();
-        auto range = link_index_.equal_range(hash);
-        for (auto it = range.first; it != range.second; ++it) {
-            if (it->second->getType() == type && it->second->equals(probe)) {
-                return it->second;
-            }
-        }
-        return nullptr;
-    }
-
-    /**
-     * Get an atom by type and (for nodes) name; for links this matches by
-     * type only.  Provided for API compatibility with cognitive consumers.
-     */
-    Handle getAtom(Atom::Type type, const std::string& name) const {
-        return getNode(type, name);
-    }
-
-    /**
      * Clear all atoms
      */
     void clear() {

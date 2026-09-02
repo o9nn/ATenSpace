@@ -116,14 +116,6 @@ public:
     }
     
     /**
-     * Whether the atom has a recorded creation time.
-     */
-    bool hasCreationTime(Handle atom) const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return temporal_info_.find(atom) != temporal_info_.end();
-    }
-
-    /**
      * Get creation time for an atom
      */
     TimePoint getCreationTime(Handle atom) const {

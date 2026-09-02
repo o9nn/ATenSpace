@@ -214,6 +214,11 @@ add_executable(atomspace_test_phase13 test_phase13.cpp)
 target_link_libraries(atomspace_test_phase13 ${TORCH_LIBRARIES})
 set_property(TARGET atomspace_test_phase13 PROPERTY CXX_STANDARD 17)
 
+# Query & reasoning completeness test (Phase 14: AbsentLink, query bindings)
+add_executable(atomspace_test_phase14 test_phase14.cpp)
+target_link_libraries(atomspace_test_phase14 ${TORCH_LIBRARIES})
+set_property(TARGET atomspace_test_phase14 PROPERTY CXX_STANDARD 17)
+
 # Installation
 install(FILES 
     Atom.h 
