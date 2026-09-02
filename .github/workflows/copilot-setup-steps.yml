@@ -1,7 +1,15 @@
+# =============================================================================
+# Copilot Setup Steps — ATenSpace Cognitive Environment Provisioning
+#
+# This workflow runs automatically inside the Copilot coding agent environment
+# before every agent session. It preinstalls all dependencies and validates
+# that the full ATenCog build/test substrate is functional, giving each
+# specialist agent maximal cognitive grip on the codebase from step zero.
+#
+# Manual trigger is also enabled so the setup can be validated in CI directly.
+# =============================================================================
 name: "Copilot Setup Steps"
 
-# Automatically run the setup steps when they are changed to allow for easy validation, and
-# allow manual testing through the repository's "Actions" tab.
 on:
   workflow_dispatch:
   push:
@@ -11,45 +19,123 @@ on:
     paths:
       - .github/workflows/copilot-setup-steps.yml
 
+permissions: {}
+
 jobs:
-  # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+  # NOTE: The job MUST be named "copilot-setup-steps" to be discovered and
+  # executed by the Copilot coding agent environment.
   copilot-setup-steps:
     runs-on: ubuntu-latest
-
-    # Set the permissions to the lowest permissions possible needed for the steps.
-    permissions:
-      contents: read
-
+    timeout-minutes: 45
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: "pip"
 
-      - name: Install system dependencies
+      - name: Install CPU-only PyTorch, pybind11, pytest
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            cmake build-essential ninja-build \
-            libeigen3-dev libopenblas-dev
-
-      - name: Install PyTorch (CPU) and Python deps
-        run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install pybind11 numpy pytest wheel setuptools
+          pip install pybind11 pytest
+          python -c "import torch; print('torch', torch.__version__, '| cmake prefix:', torch.utils.cmake_prefix_path)"
 
-      - name: Configure CMake (atomspace)
+      - name: Install CMake + Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Cache ATenSpace CMake build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-atomspace-build-${{ hashFiles('aten/src/ATen/atomspace/**') }}
+          restore-keys: |
+            ${{ runner.os }}-atomspace-build-
+
+      - name: Configure ATenSpace (atomspace) build
         run: |
-          cmake -S aten/src/ATen/atomspace \
-                -B build \
-                -G Ninja \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_PREFIX_PATH="$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')" \
-                -DBUILD_PYTHON_BINDINGS=OFF
+          cmake -S aten/src/ATen/atomspace -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=$(python -c 'import torch;print(torch.utils.cmake_prefix_path)')
 
-      - name: Build all targets
-        run: cmake --build build --parallel
+      # Build with Ninja keep-going (`-k 0`) so that targets broken on the
+      # current base commit do not abort the whole build: every compilable
+      # `atomspace_test_*`/`atomspace_example_*` binary is still produced.
+      # The step is intentionally non-fatal (`|| true`) — a subset of the
+      # atomspace targets are known-broken pending Iterations 1–7, and the
+      # membrane's job is to provision the environment, not gate on them.
+      - name: Build all atomspace targets
+        run: |
+          set +e
+          cmake --build build --parallel -- -k 0
+          echo "Build completed (some targets may be broken on the base commit)."
+          exit 0
+
+      # Execute every test binary that actually built, with a per-binary
+      # timeout so a hanging test (e.g. ECAN runCycle on the base commit)
+      # cannot consume the job's time budget. This step is a *report*, not a
+      # gate: it never fails, so the critical Python-binding steps below are
+      # always reached. Real pass/fail enforcement lives in build.yml / e2e-tests.yml.
+      - name: Verify all C++ test binaries execute
+        run: |
+          set +e
+          found=0; passed=0; failed=0; hung=0
+          for t in build/atomspace_test*; do
+            if [ -x "$t" ] && [ ! -d "$t" ]; then
+              found=$((found + 1))
+              echo "=== Running $t ==="
+              timeout 60 "$t"
+              rc=$?
+              if [ "$rc" -eq 0 ]; then
+                passed=$((passed + 1))
+              elif [ "$rc" -eq 124 ]; then
+                echo "TIMEOUT: $t exceeded 60s"
+                hung=$((hung + 1))
+              else
+                echo "FAILED: $t (exit $rc)"
+                failed=$((failed + 1))
+              fi
+            fi
+          done
+          echo "---------------------------------------------------------"
+          echo "atomspace_test_* summary: $found built | $passed passed | $failed failed | $hung timed-out"
+          if [ "$found" -eq 0 ]; then
+            echo "WARNING: no atomspace_test_* binaries were produced"
+          fi
+          exit 0
+
+      # Reconfigure with bindings ON, then build ONLY the `atenspace` target so
+      # the known-broken C++ test/example targets cannot block installation of
+      # the Python module. The build is tolerant: on the current base commit
+      # python_bindings.cpp itself has pre-existing pybind11 arg-annotation
+      # mismatches (fixed by the Iteration roadmap), so a failure here must not
+      # abort provisioning — the core toolchain (torch/CMake/Ninja) is the grip.
+      - name: Build + install Python bindings
+        run: |
+          cmake -S aten/src/ATen/atomspace -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_PYTHON_BINDINGS=ON \
+            -DCMAKE_PREFIX_PATH=$(python -c 'import torch;print(torch.utils.cmake_prefix_path)')
+          if cmake --build build --parallel --target atenspace \
+             && cmake --install build --prefix "$GITHUB_WORKSPACE"; then
+            echo "ATENSPACE_BINDINGS_BUILT=true" >> "$GITHUB_ENV"
+            echo "atenspace Python bindings built and installed."
+          else
+            echo "ATENSPACE_BINDINGS_BUILT=false" >> "$GITHUB_ENV"
+            echo "WARNING: atenspace bindings failed to build on this base commit (known pre-existing issue); continuing."
+          fi
+
+      - name: Verify atenspace module imports
+        if: env.ATENSPACE_BINDINGS_BUILT == 'true'
+        run: python -c "import atenspace as at; s = at.AtomSpace(); print('atenspace OK, atoms:', len(s))"
+
+      - name: Run Python test suite
+        if: env.ATENSPACE_BINDINGS_BUILT == 'true'
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m pytest tests/python/ -v

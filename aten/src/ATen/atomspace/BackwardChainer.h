@@ -61,21 +61,30 @@ struct Proof {
 class BackwardChainer {
 public:
     BackwardChainer(AtomSpace& space)
-        : space_(space), maxDepth_(10), maxProofs_(5) {}
-    
+        : space_(space), maxDepth_(10), maxProofs_(5), maxSteps_(10000) {}
+
     /**
      * Set maximum proof search depth
      */
     void setMaxDepth(int depth) {
         maxDepth_ = depth;
     }
-    
+
     /**
      * Set maximum number of proofs to find
      */
     void setMaxProofs(int maxProofs) {
         maxProofs_ = maxProofs;
     }
+
+    /**
+     * Set the global step budget (Iteration 1, FR-1.4).
+     *
+     * A hard cap on the total number of recursive proof steps across a
+     * prove() call, guaranteeing termination on cyclic knowledge graphs.
+     */
+    void setMaxSteps(int maxSteps) { maxSteps_ = maxSteps; }
+    int getMaxSteps() const { return maxSteps_; }
     
     /**
      * Add an inference rule for backward chaining
@@ -93,9 +102,10 @@ public:
     std::vector<std::shared_ptr<Proof>> prove(const Atom::Handle& goal) {
         std::set<Atom::Handle> visited;
         std::vector<std::shared_ptr<Proof>> proofs;
-        
-        proveRecursive(goal, 0, visited, proofs);
-        
+        int stepsUsed = 0;
+
+        proveRecursive(goal, 0, visited, proofs, stepsUsed);
+
         return proofs;
     }
     
@@ -159,12 +169,15 @@ private:
     void proveRecursive(const Atom::Handle& goal,
                        int depth,
                        std::set<Atom::Handle>& visited,
-                       std::vector<std::shared_ptr<Proof>>& proofs) {
-        // Check termination conditions
+                       std::vector<std::shared_ptr<Proof>>& proofs,
+                       int& stepsUsed) {
+        // Check termination conditions (FR-1.4: depth + step budget + cycle guard)
         if (depth > maxDepth_) return;
         if (proofs.size() >= maxProofs_) return;
+        if (stepsUsed >= maxSteps_) return;
         if (visited.count(goal)) return; // Avoid cycles
-        
+
+        ++stepsUsed;
         visited.insert(goal);
         
         // Strategy 1: Check if goal is directly in atomspace
@@ -192,8 +205,8 @@ private:
         }
         
         // Strategy 3: Backward chain using rules
-        backwardChainRules(goal, depth, visited, proofs);
-        
+        backwardChainRules(goal, depth, visited, proofs, stepsUsed);
+
         visited.erase(goal);
     }
     
@@ -233,20 +246,24 @@ private:
     void backwardChainRules(const Atom::Handle& goal,
                            int depth,
                            std::set<Atom::Handle>& visited,
-                           std::vector<std::shared_ptr<Proof>>& proofs) {
+                           std::vector<std::shared_ptr<Proof>>& proofs,
+                           int& stepsUsed) {
         // For each rule, check if it could prove the goal
         for (const auto& rule : rules_) {
+            if (stepsUsed >= maxSteps_) return;
             // Try to find premises that would allow the rule to prove the goal
             auto potentialPremises = findPotentialPremises(goal, rule);
-            
+
             for (const auto& premises : potentialPremises) {
+                if (stepsUsed >= maxSteps_) return;
                 // Try to prove each premise recursively
                 bool allPremisesProven = true;
                 std::vector<std::shared_ptr<Proof>> subproofs;
-                
+
                 for (const auto& premise : premises) {
                     std::vector<std::shared_ptr<Proof>> premiseProofs;
-                    proveRecursive(premise, depth + 1, visited, premiseProofs);
+                    proveRecursive(premise, depth + 1, visited, premiseProofs,
+                                  stepsUsed);
                     
                     if (premiseProofs.empty()) {
                         allPremisesProven = false;
@@ -347,6 +364,7 @@ private:
     std::vector<std::shared_ptr<InferenceRule>> rules_;
     int maxDepth_;
     size_t maxProofs_;
+    int maxSteps_;
 };
 
 } // namespace atomspace

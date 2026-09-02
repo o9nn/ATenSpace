@@ -77,9 +77,9 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
 
         std::vector<std::pair<Handle, float>> neighbors;
-        // Use the lock-free helper: this method already holds mutex_, and
-        // getHebbianLinks() would re-lock the same non-recursive mutex,
-        // causing a self-deadlock (the ECAN runCycle hang).
+        // Use the lock-free internal helper: this method already holds
+        // mutex_, and calling the public getHebbianLinks() here would
+        // deadlock on the non-recursive mutex.
         auto links = getHebbianLinksLocked(atom);
 
         for (const auto& link : links) {
@@ -131,7 +131,8 @@ public:
 
 private:
     /**
-     * Lock-free Hebbian-link collection.  Caller must hold mutex_.
+     * Lock-free internal implementation of getHebbianLinks.
+     * Caller must hold mutex_.
      */
     std::vector<Handle> getHebbianLinksLocked(Handle atom) const {
         std::vector<Handle> links;
@@ -597,6 +598,13 @@ public:
     WageAgent& getWageAgent() { return wage_agent_; }
     
     /**
+     * Set the LTI forgetting threshold (used by CognitiveEngine mode config)
+     */
+    void setForgettingThreshold(float threshold) {
+        forgetting_agent_.setLTIThreshold(threshold);
+    }
+
+    /**
      * Get statistics
      */
     size_t getCycleCount() const {
@@ -625,44 +633,37 @@ private:
 };
 
 /**
- * ECAN - Convenience facade over the ECAN agent suite.
+ * ECAN - Facade over ECANManager for the CognitiveEngine (Iteration 1).
  *
- * CognitiveEngine and several examples reference a single `ECAN` object that
- * can be constructed from an AttentionBank alone and stepped via runCycle().
- * This facade owns an internal AtomSpace when one is not supplied, wires up
- * the individual agents (Hebbian, spreading, forgetting, rent, wage), and
- * forwards the small configuration surface consumers rely on
- * (setForgettingThreshold).  For full control use ECANManager directly.
+ * CognitiveEngine holds its own AtomSpace and AttentionBank; this facade
+ * satisfies the `ECAN(attentionBank)` / `runCycle()` / `setForgettingThreshold()`
+ * surface it expects while delegating to ECANManager.  When constructed from
+ * an AttentionBank alone it owns an internal AtomSpace.
  */
 class ECAN {
 public:
-    using Handle = Atom::Handle;
+    ECAN(AtomSpace& space, AttentionBank& bank)
+        : owned_space_(nullptr),
+          manager_(std::make_shared<ECANManager>(space, bank)) {}
 
     explicit ECAN(AttentionBank& bank)
         : owned_space_(std::make_shared<AtomSpace>()),
-          manager_(*owned_space_, bank) {}
+          manager_(std::make_shared<ECANManager>(*owned_space_, bank)) {}
 
-    ECAN(AtomSpace& space, AttentionBank& bank)
-        : owned_space_(nullptr),
-          manager_(space, bank) {}
-
-    /// Run one full ECAN cycle.
-    void runCycle() { manager_.runCycle(); }
-
-    /// Configure the forgetting threshold (maps to the LTI threshold).
+    void runCycle() { manager_->runCycle(); }
     void setForgettingThreshold(float threshold) {
-        manager_.getForgettingAgent().setLTIThreshold(threshold);
+        manager_->setForgettingThreshold(threshold);
     }
-
-    /// Pay a wage to an atom that was useful in a cognitive process.
-    void payWage(Handle atom) { manager_.payWage(atom); }
-
-    /// Access the underlying manager for advanced configuration.
-    ECANManager& getManager() { return manager_; }
+    void payWage(Atom::Handle atom) { manager_->payWage(atom); }
+    void payWages(const std::vector<Atom::Handle>& atoms) {
+        manager_->payWages(atoms);
+    }
+    size_t getCycleCount() const { return manager_->getCycleCount(); }
+    std::shared_ptr<ECANManager> getManager() const { return manager_; }
 
 private:
     std::shared_ptr<AtomSpace> owned_space_; // non-null when self-owned
-    ECANManager manager_;
+    std::shared_ptr<ECANManager> manager_;
 };
 
 } // namespace atomspace

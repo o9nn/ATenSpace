@@ -80,35 +80,35 @@ public:
     size_t getHash() const { return hash_; }
 
     // ------------------------------------------------------------------
-    // Uniform base-class conveniences.
+    // Unified accessor surface (Iteration 1, FR-1.3)
     //
-    // These provide a common interface on the Atom base so that generic
-    // algorithms (NLU generation, vision grounding, tensor engines, neural
-    // bridges) can operate on `Atom::Handle` without downcasting.  The base
-    // implementations return safe defaults; Node/Link override the ones that
-    // are meaningful for them.  This resolves API drift where consumer code
-    // was written against a richer base interface.
+    // These provide safe defaults on the Atom base so that generic code
+    // (NLU, Vision, ATenNN, TensorLogicEngine, Python bindings) can call
+    // them without first downcasting to Node/Link.  Node and Link
+    // override the relevant subset.
     // ------------------------------------------------------------------
 
-    /// Name of the atom (Nodes only; empty string for links).
+    /** Name of the atom (nodes only; links return an empty string). */
     virtual std::string getName() const { return ""; }
 
-    /// Ordered outgoing set (Links only; empty for nodes).
+    /** Outgoing set (links only; nodes get an empty set). */
     virtual const std::vector<Handle>& getOutgoing() const {
         static const std::vector<Handle> kEmpty;
         return kEmpty;
     }
 
-    /// Tensor embedding accessors (meaningful for Nodes; no-op on links).
-    virtual void setEmbedding(const Tensor& embedding) { (void)embedding; }
+    /** Arity of the outgoing set (0 for nodes). */
+    virtual size_t getArity() const { return 0; }
+
+    /** Tensor embedding accessors (nodes only; default no-op/undefined). */
+    virtual void setEmbedding(const Tensor& /*embedding*/) {}
     virtual Tensor getEmbedding() const { return Tensor(); }
     virtual bool hasEmbedding() const { return false; }
 
-    /// Arity of the atom (Links: outgoing-set size; Nodes: 0).
-    virtual size_t getArity() const { return 0; }
-
-    /// Live incoming atoms (weak references resolved).  Links/nodes that
-    /// reference this atom.  Expired weak references are dropped.
+    /**
+     * Live incoming atoms (weak references resolved).  Links/nodes that
+     * reference this atom.  Expired weak references are dropped.
+     */
     std::vector<Handle> getIncoming() const {
         std::vector<Handle> live;
         live.reserve(incoming_set_.size());
@@ -260,7 +260,6 @@ public:
     bool isLink() const override { return true; }
 
     const OutgoingSet& getOutgoingSet() const { return outgoing_; }
-    // Uniform base interface: expose outgoing set via the virtual accessor.
     const OutgoingSet& getOutgoing() const override { return outgoing_; }
     size_t getArity() const override { return outgoing_.size(); }
     

@@ -114,7 +114,36 @@ public:
         auto it = node_index_.find(key);
         return (it != node_index_.end()) ? it->second : nullptr;
     }
-    
+
+    /**
+     * Get an atom by type and name (node lookup).
+     * Alias for getNode() provided for API completeness (Iteration 1, FR-1.3).
+     */
+    Handle getAtom(Atom::Type type, const std::string& name) const {
+        return getNode(type, name);
+    }
+
+    /**
+     * Get a link by type and outgoing set.
+     * Returns the existing link if one with the same type and outgoing
+     * set exists, otherwise nullptr.
+     */
+    Handle getLink(Atom::Type type, const std::vector<Handle>& outgoing) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        // Compute the hash the same way addLink does
+        Link probe(type, outgoing);
+        size_t hash = probe.getHash();
+
+        auto range = link_index_.equal_range(hash);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second->equals(probe)) {
+                return it->second;
+            }
+        }
+        return nullptr;
+    }
+
     /**
      * Remove an atom from the atomspace
      * Returns true if atom was removed
@@ -192,10 +221,22 @@ public:
         return atoms_.size();
     }
 
-    /// Backward-compatible alias for size() used by cognitive consumers.
-    size_t getAtomCount() const { return size(); }
-    /// Backward-compatible alias for size().
-    size_t getSize() const { return size(); }
+    /**
+     * Get the number of atoms (Iteration 1, FR-1.3).
+     * Alias over size() used by downstream metrics (CognitiveEngine, ECAN).
+     */
+    size_t getAtomCount() const {
+        return size();
+    }
+
+    /**
+     * Get the number of atoms.  Alias over size() used by older
+     * tests/examples (FR-1.5 no-regression surface).
+     */
+    size_t getSize() const {
+        return size();
+    }
+
     /// Backward-compatible alias for size() used by NN consumers.
     size_t getNumAtoms() const { return size(); }
 
@@ -222,7 +263,7 @@ public:
     Handle getAtom(Atom::Type type, const std::string& name) const {
         return getNode(type, name);
     }
-    
+
     /**
      * Clear all atoms
      */
