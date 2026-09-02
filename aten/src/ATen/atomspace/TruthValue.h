@@ -22,6 +22,13 @@ public:
     // Constants for numerical stability and default parameters
     static constexpr float EPSILON = 0.0001f;
     static constexpr float INDEFINITE_K = 10.0f;  // Controls confidence growth rate
+
+    // Uncertainty discounts applied by the batched tensor-lane PLN
+    // contractions (Iteration 2, FR-2.2). Induction and abduction are less
+    // certain than deduction, so their confidence is discounted; these are
+    // the tensor-lane counterparts of the scalar 0.8 abduction discount.
+    static constexpr float INDUCTION_DISCOUNT = 0.8f;
+    static constexpr float ABDUCTION_DISCOUNT = 0.8f;
     
     /**
      * Create a truth value tensor [strength, confidence]

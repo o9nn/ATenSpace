@@ -13,13 +13,17 @@
  *  - Pattern class (hasVariables, getVariables)
  */
 
+#include <ATen/ATen.h>  // before legacy headers so `at::Tensor` is the modern type
+
 #include "ATenSpaceCore.h"
 #include "InferencePipeline.h"
 #include "PatternMatcher.h"
+#include "TensorLogicEngine.h"
 
 #include <iostream>
 #include <cassert>
 #include <string>
+#include <cmath>
 
 using namespace at::atomspace;
 
@@ -43,6 +47,13 @@ static int tests_failed = 0;
 
 #define ASSERT(cond) \
     if (!(cond)) throw std::runtime_error("Assertion failed: " #cond)
+
+#define ASSERT_NEAR(a, b, eps) \
+    if (std::abs((a) - (b)) > (eps)) { \
+        throw std::runtime_error( \
+            std::string("ASSERT_NEAR failed: |") + std::to_string(a) + \
+            " - " + std::to_string(b) + "| > " + std::to_string(eps)); \
+    }
 
 // ======================================================================== //
 //  PLNDeductionStep
@@ -449,6 +460,103 @@ void testPatternNoVariables() {
 }
 
 // ======================================================================== //
+//  Iteration 2: batch PLN pipeline assertions                               //
+// ======================================================================== //
+
+void testBatchDeductionMatchesPipelineStep() {
+    TEST("Iteration 2: batchDeduction matches PLNDeductionStep TV math")
+        AtomSpace space;
+        auto A = createConceptNode(space, "VB_A");
+        auto B = createConceptNode(space, "VB_B");
+        auto C = createConceptNode(space, "VB_C");
+
+        auto ab = space.addLink(Atom::Type::INHERITANCE_LINK, {A, B});
+        auto bc = space.addLink(Atom::Type::INHERITANCE_LINK, {B, C});
+        ab->setTruthValue(TruthValue::create(0.9f, 0.8f));
+        bc->setTruthValue(TruthValue::create(0.8f, 0.7f));
+
+        // Scalar pipeline step
+        std::vector<Atom::Handle> ws = {ab, bc};
+        PLNDeductionStep step;
+        step.execute(ws, space);
+
+        float stepStrength = -1.0f;
+        for (const auto& a : ws) {
+            if (!a->isLink()) continue;
+            const Link* l = static_cast<const Link*>(a.get());
+            if (l->getType() == Atom::Type::INHERITANCE_LINK &&
+                l->getArity() == 2 &&
+                l->getOutgoingAtom(0)->equals(*A) &&
+                l->getOutgoingAtom(1)->equals(*C)) {
+                stepStrength = TruthValue::getStrength(a->getTruthValue());
+            }
+        }
+        ASSERT(stepStrength >= 0.0f);
+
+        // Vectorised contraction on the same premises
+        TensorLogicEngine engine;
+        at::Tensor batched = engine.batchDeduction({ab}, {bc});
+        ASSERT_NEAR(batched[0][0].item<float>(), stepStrength, 1e-4f);
+    END_TEST
+}
+
+void testBatchRevisionMatchesRevisionStep() {
+    TEST("Iteration 2: batchRevision matches PLNRevisionStep TV math")
+        AtomSpace space;
+        auto node = createConceptNode(space, "VR_Node");
+        node->setTruthValue(TruthValue::create(0.6f, 0.5f));
+
+        // Scalar revision formula reference
+        at::Tensor ref = TruthValue::revision(node->getTruthValue(),
+                                          node->getTruthValue());
+
+        // Vectorised lane contraction on identical inputs
+        TensorLogicEngine engine;
+        at::Tensor batched = engine.batchRevision({node}, {node});
+        ASSERT_NEAR(batched[0][0].item<float>(),
+                    TruthValue::getStrength(ref), 1e-4f);
+        ASSERT_NEAR(batched[0][1].item<float>(),
+                    TruthValue::getConfidence(ref), 1e-4f);
+    END_TEST
+}
+
+void testForwardChainerOffloadInPipeline() {
+    TEST("Iteration 2: ForwardChainer batch offload derives correct TVs")
+        AtomSpace space;
+        auto A = createConceptNode(space, "VC_A");
+        auto B = createConceptNode(space, "VC_B");
+        auto C = createConceptNode(space, "VC_C");
+        auto D = createConceptNode(space, "VC_D");
+
+        auto ab = space.addLink(Atom::Type::INHERITANCE_LINK, {A, B});
+        auto bc = space.addLink(Atom::Type::INHERITANCE_LINK, {B, C});
+        auto cd = space.addLink(Atom::Type::INHERITANCE_LINK, {C, D});
+        ab->setTruthValue(TruthValue::create(0.9f, 0.9f));
+        bc->setTruthValue(TruthValue::create(0.85f, 0.85f));
+        cd->setTruthValue(TruthValue::create(0.8f, 0.8f));
+
+        ForwardChainer chainer(space);
+        chainer.setMaxIterations(4);
+        chainer.setConfidenceThreshold(0.05f);
+        int created = chainer.run();
+        ASSERT(created > 0);
+
+        // The transitive closure must include A→D and its TV must match
+        // repeated scalar deduction within 1e-4.
+        auto ad = space.getLink(Atom::Type::INHERITANCE_LINK, {A, D});
+        ASSERT(ad != nullptr);
+
+        at::Tensor refAC = TruthValue::deduction(ab->getTruthValue(),
+                                             bc->getTruthValue());
+        at::Tensor refAD = TruthValue::deduction(refAC, cd->getTruthValue());
+        // Allow slightly looser tolerance because revision merges may
+        // combine multiple derivation paths for A→D.
+        ASSERT_NEAR(TruthValue::getStrength(ad->getTruthValue()),
+                    TruthValue::getStrength(refAD), 1e-2f);
+    END_TEST
+}
+
+// ======================================================================== //
 //  Main
 // ======================================================================== //
 
@@ -486,6 +594,11 @@ int main() {
     testPatternHasVariables();
     testPatternGetVariables();
     testPatternNoVariables();
+
+    std::cout << "\n-- Iteration 2: batch PLN --\n";
+    testBatchDeductionMatchesPipelineStep();
+    testBatchRevisionMatchesRevisionStep();
+    testForwardChainerOffloadInPipeline();
 
     std::cout << "\n=== Results: "
               << tests_passed << " passed, "

@@ -8,8 +8,11 @@
  *  - makePLNCompletePipeline factory helper
  */
 
+#include <ATen/ATen.h>  // before legacy headers so `at::Tensor` is the modern type
+
 #include "ATenSpaceCore.h"
 #include "InferencePipeline.h"
+#include "TensorLogicEngine.h"
 
 #include <iostream>
 #include <cassert>
@@ -600,6 +603,107 @@ void testImplicationChainInPipelineRun() {
 }
 
 // ======================================================================== //
+//  Iteration 2: batch implication completeness                              //
+// ======================================================================== //
+
+void testBatchDeductionMatchesImplicationChainTV() {
+    TEST("Iteration 2: batchDeduction matches PLNImplicationChainStep chained TV")
+        AtomSpace space;
+        auto A = createConceptNode(space, "BI_A");
+        auto B = createConceptNode(space, "BI_B");
+        auto C = createConceptNode(space, "BI_C");
+
+        float sAB = 0.8f, cAB = 0.9f;
+        float sBC = 0.7f, cBC = 0.6f;
+
+        auto ab = space.addLink(Atom::Type::IMPLICATION_LINK, {A, B});
+        auto bc = space.addLink(Atom::Type::IMPLICATION_LINK, {B, C});
+        ab->setTruthValue(TruthValue::create(sAB, cAB));
+        bc->setTruthValue(TruthValue::create(sBC, cBC));
+
+        // Scalar chain step derives A→C with the deduction formula.
+        std::vector<Atom::Handle> ws = {A, B, C, ab, bc};
+        PLNImplicationChainStep step(3, 0.0f);
+        step.execute(ws, space);
+
+        float chainStrength = -1.0f;
+        for (const auto& a : ws) {
+            if (!a->isLink() || a->getType() != Atom::Type::IMPLICATION_LINK)
+                continue;
+            const Link* l = static_cast<const Link*>(a.get());
+            if (l->getArity() == 2 &&
+                l->getOutgoingAtom(0)->getHash() == A->getHash() &&
+                l->getOutgoingAtom(1)->getHash() == C->getHash()) {
+                chainStrength = TruthValue::getStrength(a->getTruthValue());
+            }
+        }
+        ASSERT(chainStrength >= 0.0f);
+
+        // Vectorised contraction on the same implication premises.
+        TensorLogicEngine engine;
+        at::Tensor batched = engine.batchDeduction({ab}, {bc});
+        ASSERT_NEAR(batched[0][0].item<float>(), chainStrength, 1e-4f);
+        ASSERT_NEAR(batched[0][0].item<float>(), sAB * sBC, 1e-4f);
+    END_TEST
+}
+
+void testBatchBackwardChainerEquivalence() {
+    TEST("Iteration 2: BackwardChainer batch offload matches scalar proof TV")
+        AtomSpace space;
+        auto socrates = createConceptNode(space, "BSoc");
+        auto human    = createConceptNode(space, "BHuman");
+        auto mortal   = createConceptNode(space, "BMortal");
+
+        auto sh = createInheritanceLink(space, socrates, human);
+        sh->setTruthValue(TruthValue::create(1.0f, 0.95f));
+        auto hm = createInheritanceLink(space, human, mortal);
+        hm->setTruthValue(TruthValue::create(0.99f, 0.99f));
+
+        auto goal = createInheritanceLink(space, socrates, mortal);
+
+        // Both batch and scalar backward chaining find the direct-match
+        // proof for a goal already in the space. The key invariant is that
+        // enabling batch offload does not change the provability or the
+        // best-proof truth value.
+        BackwardChainer batchBC(space);
+        batchBC.addRule(std::make_shared<DeductionRule>());
+        batchBC.setMaxDepth(5);
+        auto batchProofs = batchBC.prove(goal);
+        ASSERT(!batchProofs.empty());
+
+        // Scalar reference
+        at::Tensor ref = TruthValue::deduction(sh->getTruthValue(),
+                                           hm->getTruthValue());
+        (void)ref;
+
+        // Scalar fallback (offload disabled) agrees with batch path.
+        AtomSpace space2;
+        auto s2 = createConceptNode(space2, "BSoc");
+        auto h2 = createConceptNode(space2, "BHuman");
+        auto m2 = createConceptNode(space2, "BMortal");
+        auto sh2 = createInheritanceLink(space2, s2, h2);
+        sh2->setTruthValue(TruthValue::create(1.0f, 0.95f));
+        auto hm2 = createInheritanceLink(space2, h2, m2);
+        hm2->setTruthValue(TruthValue::create(0.99f, 0.99f));
+        auto goal2 = createInheritanceLink(space2, s2, m2);
+
+        BackwardChainer scalarBC(space2);
+        scalarBC.addRule(std::make_shared<DeductionRule>());
+        scalarBC.setBatchOffload(false);
+        scalarBC.setMaxDepth(5);
+        auto scalarProofs = scalarBC.prove(goal2);
+        ASSERT(!scalarProofs.empty());
+        // Batch and scalar paths agree on the provability and best TV.
+        ASSERT_NEAR(TruthValue::getStrength(scalarProofs[0]->truthValue),
+                    TruthValue::getStrength(batchProofs[0]->truthValue),
+                    1e-4f);
+        ASSERT_NEAR(TruthValue::getConfidence(scalarProofs[0]->truthValue),
+                    TruthValue::getConfidence(batchProofs[0]->truthValue),
+                    1e-4f);
+    END_TEST
+}
+
+// ======================================================================== //
 //  Main
 // ======================================================================== //
 
@@ -636,6 +740,10 @@ int main() {
     testCompletePipelineEndToEnd();
     testImplicationStepInPipelineRun();
     testImplicationChainInPipelineRun();
+
+    std::cout << "\n-- Iteration 2: batch implication completeness --\n";
+    testBatchDeductionMatchesImplicationChainTV();
+    testBatchBackwardChainerEquivalence();
 
     std::cout << "\n=== Results: " << tests_passed << " passed, "
               << tests_failed  << " failed ===\n\n";

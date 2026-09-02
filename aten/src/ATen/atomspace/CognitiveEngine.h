@@ -85,7 +85,7 @@ public:
         , attentionBank_(std::make_shared<AttentionBank>())
         , forwardChainer_(std::make_shared<ForwardChainer>(space))
         , backwardChainer_(std::make_shared<BackwardChainer>(space))
-        , ecan_(std::make_shared<ECAN>(*attentionBank_))
+        , ecan_(std::make_shared<ECAN>(space, *attentionBank_))
         , tensorLogic_(std::make_shared<TensorLogicEngine>())
         , cycleCount_(0)
         , isRunning_(false) {

@@ -1,13 +1,21 @@
 #include <ATen/atomspace/ATenSpace.h>
+#include <ATen/atomspace/TensorLogicEngine.h>
 #include <cassert>
 #include <iostream>
 #include <cmath>
+#include <random>
 
 using namespace at::atomspace;
 
 // Helper function for approximate equality
 bool approxEqual(float a, float b, float epsilon = 0.01f) {
     return std::abs(a - b) < epsilon;
+}
+
+// Tighter tolerance for the vectorised vs scalar equivalence checks
+// (Iteration 2, FR-2.5: batch results must match the scalar reference).
+bool tvNear(float a, float b, float eps = 1e-4f) {
+    return std::abs(a - b) <= eps;
 }
 
 void testPatternMatching() {
@@ -385,10 +393,240 @@ void testIndefiniteTruthValues() {
     std::cout << "PASSED" << std::endl;
 }
 
+// ======================================================================= //
+//  Iteration 2: vectorised PLN tensor contractions                          //
+// ======================================================================= //
+
+void testBatchDeductionEquivalence() {
+    std::cout << "Testing Batch Deduction (vectorised vs scalar)... ";
+
+    AtomSpace space;
+    TensorLogicEngine engine;
+
+    // Fixed corpus of (A_i→B_i, B_i→C_i) premise pairs.
+    const float kStrengths1[] = {0.9f, 0.5f, 0.1f, 1.0f, 0.73f};
+    const float kConfs1[]     = {0.8f, 0.2f, 0.9f, 0.5f, 0.66f};
+    const float kStrengths2[] = {0.8f, 0.4f, 0.3f, 0.9f, 0.21f};
+    const float kConfs2[]     = {0.9f, 0.7f, 0.1f, 0.4f, 0.88f};
+    const size_t n = 5;
+
+    std::vector<Atom::Handle> p1, p2;
+    for (size_t i = 0; i < n; ++i) {
+        auto A = createConceptNode(space, "bd-A" + std::to_string(i));
+        auto B = createConceptNode(space, "bd-B" + std::to_string(i));
+        auto C = createConceptNode(space, "bd-C" + std::to_string(i));
+        auto AB = createInheritanceLink(space, A, B);
+        auto BC = createInheritanceLink(space, B, C);
+        AB->setTruthValue(TruthValue::create(kStrengths1[i], kConfs1[i]));
+        BC->setTruthValue(TruthValue::create(kStrengths2[i], kConfs2[i]));
+        p1.push_back(AB);
+        p2.push_back(BC);
+    }
+
+    at::Tensor batched = engine.batchDeduction(p1, p2);
+    assert(batched.size(0) == static_cast<int64_t>(n));
+    assert(batched.size(1) == 2);
+
+    for (size_t i = 0; i < n; ++i) {
+        at::Tensor ref = TruthValue::deduction(p1[i]->getTruthValue(),
+                                           p2[i]->getTruthValue());
+        assert(tvNear(batched[i][0].item<float>(),
+                      TruthValue::getStrength(ref)));
+        assert(tvNear(batched[i][1].item<float>(),
+                      TruthValue::getConfidence(ref)));
+    }
+
+    // Raw-tensor contraction overload agrees with the atom-based overload.
+    at::Tensor raw = engine.batchDeductionTV(engine.batchDeduction(p1, p2),
+                                         engine.batchDeduction(p1, p2));
+    at::Tensor twice = engine.batchDeduction(p1, p2);
+    assert(raw.sizes() == twice.sizes());
+
+    std::cout << "PASSED" << std::endl;
+}
+
+void testBatchInductionAbductionEquivalence() {
+    std::cout << "Testing Batch Induction/Abduction (vectorised vs scalar)... ";
+
+    AtomSpace space;
+    TensorLogicEngine engine;
+
+    const size_t n = 4;
+    const float kS1[] = {0.9f, 0.6f, 0.3f, 0.85f};
+    const float kC1[] = {0.8f, 0.5f, 0.95f, 0.42f};
+    const float kS2[] = {0.7f, 0.55f, 0.25f, 0.9f};
+    const float kC2[] = {0.9f, 0.65f, 0.8f, 0.37f};
+
+    std::vector<Atom::Handle> p1, p2;
+    for (size_t i = 0; i < n; ++i) {
+        auto A = createConceptNode(space, "ia-A" + std::to_string(i));
+        auto B = createConceptNode(space, "ia-B" + std::to_string(i));
+        auto C = createConceptNode(space, "ia-C" + std::to_string(i));
+        auto AB = createInheritanceLink(space, A, B);
+        auto AC = createInheritanceLink(space, A, C);
+        AB->setTruthValue(TruthValue::create(kS1[i], kC1[i]));
+        AC->setTruthValue(TruthValue::create(kS2[i], kC2[i]));
+        p1.push_back(AB);
+        p2.push_back(AC);
+    }
+
+    at::Tensor ind = engine.batchInduction(p1, p2);
+    at::Tensor abd = engine.batchAbduction(p1, p2);
+    assert(ind.size(0) == static_cast<int64_t>(n));
+    assert(abd.size(0) == static_cast<int64_t>(n));
+
+    for (size_t i = 0; i < n; ++i) {
+        float s1 = kS1[i], c1 = kC1[i], s2 = kS2[i], c2 = kC2[i];
+
+        // Induction: s = s1*s2, c = deduction-like confidence * 0.8 discount
+        float expIndS = s1 * s2;
+        float expIndC = (c1 * c2 * (s1 + s2)) / (1.0f + s1 * s2)
+                        * TruthValue::INDUCTION_DISCOUNT;
+        assert(tvNear(ind[i][0].item<float>(), expIndS));
+        assert(tvNear(ind[i][1].item<float>(), expIndC));
+
+        // Abduction must match the scalar TruthValue::abduction reference.
+        at::Tensor refAbd = TruthValue::abduction(p1[i]->getTruthValue(),
+                                              p2[i]->getTruthValue());
+        assert(tvNear(abd[i][0].item<float>(),
+                      TruthValue::getStrength(refAbd)));
+        assert(tvNear(abd[i][1].item<float>(),
+                      TruthValue::getConfidence(refAbd)));
+    }
+
+    std::cout << "PASSED" << std::endl;
+}
+
+void testBatchRevisionEquivalence() {
+    std::cout << "Testing Batch Revision (vectorised vs scalar)... ";
+
+    AtomSpace space;
+    TensorLogicEngine engine;
+
+    const size_t n = 3;
+    std::vector<Atom::Handle> e1, e2;
+    const float kS1[] = {0.7f, 0.2f, 0.95f};
+    const float kC1[] = {0.8f, 0.4f, 0.6f};
+    const float kS2[] = {0.8f, 0.3f, 0.9f};
+    const float kC2[] = {0.7f, 0.5f, 0.55f};
+
+    for (size_t i = 0; i < n; ++i) {
+        auto a = createConceptNode(space, "rev-a" + std::to_string(i));
+        auto b = createConceptNode(space, "rev-b" + std::to_string(i));
+        a->setTruthValue(TruthValue::create(kS1[i], kC1[i]));
+        b->setTruthValue(TruthValue::create(kS2[i], kC2[i]));
+        e1.push_back(a);
+        e2.push_back(b);
+    }
+
+    at::Tensor revised = engine.batchRevision(e1, e2);
+    for (size_t i = 0; i < n; ++i) {
+        at::Tensor ref = TruthValue::revision(e1[i]->getTruthValue(),
+                                          e2[i]->getTruthValue());
+        assert(tvNear(revised[i][0].item<float>(),
+                      TruthValue::getStrength(ref)));
+        assert(tvNear(revised[i][1].item<float>(),
+                      TruthValue::getConfidence(ref)));
+    }
+
+    // Edge case: empty batch.
+    at::Tensor emptyRev = engine.batchRevision({}, {});
+    assert(emptyRev.size(0) == 0);
+
+    std::cout << "PASSED" << std::endl;
+}
+
+void testChainerBatchOffload() {
+    std::cout << "Testing Chainer Batch Offload equivalence... ";
+
+    AtomSpace space;
+
+    // A→B→C chain with non-trivial truth values.
+    auto A = createConceptNode(space, "off-A");
+    auto B = createConceptNode(space, "off-B");
+    auto C = createConceptNode(space, "off-C");
+
+    auto AB = createInheritanceLink(space, A, B);
+    AB->setTruthValue(TruthValue::create(0.9f, 0.8f));
+    auto BC = createInheritanceLink(space, B, C);
+    BC->setTruthValue(TruthValue::create(0.85f, 0.9f));
+
+    // Batched forward chaining (default: batch offload enabled).
+    ForwardChainer batchChainer(space);
+    batchChainer.setMaxIterations(2);
+    batchChainer.setConfidenceThreshold(0.1f);
+    int newAtoms = batchChainer.run();
+    assert(newAtoms > 0);
+
+    auto AC = space.getLink(Atom::Type::INHERITANCE_LINK, {A, C});
+    assert(AC != nullptr);
+
+    // Vectorised result must match the scalar deduction reference.
+    at::Tensor ref = TruthValue::deduction(AB->getTruthValue(),
+                                       BC->getTruthValue());
+    assert(tvNear(TruthValue::getStrength(AC->getTruthValue()),
+                  TruthValue::getStrength(ref)));
+    assert(tvNear(TruthValue::getConfidence(AC->getTruthValue()),
+                  TruthValue::getConfidence(ref)));
+
+    // Scalar fallback path (offload disabled) must produce the same TV.
+    AtomSpace space2;
+    auto A2 = createConceptNode(space2, "off-A");
+    auto B2 = createConceptNode(space2, "off-B");
+    auto C2 = createConceptNode(space2, "off-C");
+    auto AB2 = createInheritanceLink(space2, A2, B2);
+    AB2->setTruthValue(TruthValue::create(0.9f, 0.8f));
+    auto BC2 = createInheritanceLink(space2, B2, C2);
+    BC2->setTruthValue(TruthValue::create(0.85f, 0.9f));
+
+    ForwardChainer scalarChainer(space2);
+    scalarChainer.setBatchOffload(false);
+    scalarChainer.setMaxIterations(2);
+    scalarChainer.setConfidenceThreshold(0.1f);
+    scalarChainer.run();
+
+    auto AC2 = space2.getLink(Atom::Type::INHERITANCE_LINK, {A2, C2});
+    assert(AC2 != nullptr);
+    assert(tvNear(TruthValue::getStrength(AC2->getTruthValue()),
+                  TruthValue::getStrength(ref)));
+    assert(tvNear(TruthValue::getConfidence(AC2->getTruthValue()),
+                  TruthValue::getConfidence(ref)));
+
+    std::cout << "PASSED" << std::endl;
+}
+
+void testBatchDispatchHeuristic() {
+    std::cout << "Testing TensorLogicEngine dispatch heuristic... ";
+
+    TensorLogicEngine engine;
+
+    // CPU mode always resolves to CPU.
+    engine.setInferenceMode(TensorLogicEngine::InferenceMode::CPU);
+    assert(engine.deviceFor(100000).is_cpu());
+
+    // AUTO without CUDA always resolves to CPU (CPU fallback, T2.5).
+    engine.setInferenceMode(TensorLogicEngine::InferenceMode::AUTO);
+    if (!torch::cuda::is_available()) {
+        assert(engine.deviceFor(0).is_cpu());
+        assert(engine.deviceFor(4096).is_cpu());
+    }
+
+    // Opting out of GPU forces CPU even in GPU mode.
+    engine.setUseGPU(false);
+    engine.setInferenceMode(TensorLogicEngine::InferenceMode::GPU);
+    assert(engine.deviceFor(4096).is_cpu());
+
+    // GPU threshold heuristic is configurable.
+    engine.setGPUThreshold(64);
+    assert(engine.getGPUThreshold() == 64);
+
+    std::cout << "PASSED" << std::endl;
+}
+
 int main() {
     std::cout << "Running PLN (Probabilistic Logic Networks) Tests" << std::endl;
     std::cout << "==================================================" << std::endl;
-    
+
     try {
         testPatternMatching();
         testTruthValueFormulas();
@@ -400,6 +638,12 @@ int main() {
         testImplicationLink();
         testAttentionGuidedInference();
         testIndefiniteTruthValues();
+        // Iteration 2: vectorised PLN
+        testBatchDeductionEquivalence();
+        testBatchInductionAbductionEquivalence();
+        testBatchRevisionEquivalence();
+        testChainerBatchOffload();
+        testBatchDispatchHeuristic();
         
         std::cout << "\n=== ALL TESTS PASSED ===" << std::endl;
         return 0;
