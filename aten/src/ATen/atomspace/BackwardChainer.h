@@ -85,7 +85,26 @@ public:
      */
     void setMaxSteps(int maxSteps) { maxSteps_ = maxSteps; }
     int getMaxSteps() const { return maxSteps_; }
-    
+
+    /**
+     * Enable/disable batching deduction truth-value evaluation through
+     * TensorLogicEngine (Iteration 2, FR-2.4). Enabled by default; proof
+     * search (premise discovery) is unchanged, only the per-rule-set
+     * truth-value evaluation is offloaded to the vectorised path.
+     */
+    void setBatchOffload(bool enable) { batchOffload_ = enable; }
+    bool getBatchOffload() const { return batchOffload_; }
+
+    /**
+     * Set the TensorLogicEngine used for batch rule offload.
+     */
+    void setTensorLogicEngine(std::shared_ptr<TensorLogicEngine> engine) {
+        if (engine) tensorLogic_ = std::move(engine);
+    }
+    std::shared_ptr<TensorLogicEngine> getTensorLogicEngine() const {
+        return tensorLogic_;
+    }
+
     /**
      * Add an inference rule for backward chaining
      */
@@ -254,8 +273,17 @@ private:
             // Try to find premises that would allow the rule to prove the goal
             auto potentialPremises = findPotentialPremises(goal, rule);
 
+            // Iteration 2 (FR-2.4): deduction premise sets whose premises
+            // are all provable are collected and their conclusion truth
+            // values evaluated in one batchDeduction tensor contraction
+            // instead of a scalar rule->apply per premise set.
+            auto deductionRule = std::dynamic_pointer_cast<DeductionRule>(rule);
+            std::vector<std::pair<std::vector<Atom::Handle>,
+                                  std::vector<std::shared_ptr<Proof>>>>
+                batchable;
+
             for (const auto& premises : potentialPremises) {
-                if (stepsUsed >= maxSteps_) return;
+                if (stepsUsed >= maxSteps_) break;
                 // Try to prove each premise recursively
                 bool allPremisesProven = true;
                 std::vector<std::shared_ptr<Proof>> subproofs;
@@ -264,31 +292,61 @@ private:
                     std::vector<std::shared_ptr<Proof>> premiseProofs;
                     proveRecursive(premise, depth + 1, visited, premiseProofs,
                                   stepsUsed);
-                    
+
                     if (premiseProofs.empty()) {
                         allPremisesProven = false;
                         break;
                     }
-                    
+
                     subproofs.push_back(premiseProofs[0]); // Take best proof
                 }
-                
-                if (allPremisesProven) {
-                    // Construct proof
+
+                if (!allPremisesProven) continue;
+
+                if (batchOffload_ && deductionRule && premises.size() == 2) {
+                    // Defer TV evaluation to the batched path below.
+                    batchable.emplace_back(premises, std::move(subproofs));
+                    continue;
+                }
+
+                // Construct proof (scalar path)
+                auto proof = std::make_shared<Proof>(goal);
+                proof->premises = premises;
+                proof->rule = rule;
+                proof->subproofs = subproofs;
+
+                // Apply rule to compute truth value
+                auto conclusions = rule->apply(premises, space_);
+                if (!conclusions.empty()) {
+                    proof->truthValue = conclusions[0]->getTruthValue();
+                }
+
+                proofs.push_back(proof);
+
+                if (proofs.size() >= maxProofs_) return;
+            }
+
+            // Batched deduction offload: one tensor contraction for all
+            // collected premise sets.
+            if (!batchable.empty()) {
+                std::vector<Atom::Handle> atoms1, atoms2;
+                atoms1.reserve(batchable.size());
+                atoms2.reserve(batchable.size());
+                for (const auto& entry : batchable) {
+                    atoms1.push_back(entry.first[0]);
+                    atoms2.push_back(entry.first[1]);
+                }
+                Tensor tvs = tensorLogic_->batchDeduction(atoms1, atoms2);
+
+                for (size_t k = 0; k < batchable.size(); ++k) {
                     auto proof = std::make_shared<Proof>(goal);
-                    proof->premises = premises;
+                    proof->premises = batchable[k].first;
                     proof->rule = rule;
-                    proof->subproofs = subproofs;
-                    
-                    // Apply rule to compute truth value
-                    auto conclusions = rule->apply(premises, space_);
-                    if (!conclusions.empty()) {
-                        proof->truthValue = conclusions[0]->getTruthValue();
-                    }
-                    
+                    proof->subproofs = batchable[k].second;
+                    proof->truthValue = tvs[static_cast<int64_t>(k)].clone();
+
                     proofs.push_back(proof);
-                    
-                    if (proofs.size() >= maxProofs_) return;
+                    if (proofs.size() >= maxProofs_) break;
                 }
             }
         }
@@ -365,6 +423,9 @@ private:
     int maxDepth_;
     size_t maxProofs_;
     int maxSteps_;
+    bool batchOffload_ = true;
+    std::shared_ptr<TensorLogicEngine> tensorLogic_ =
+        std::make_shared<TensorLogicEngine>();
 };
 
 } // namespace atomspace
