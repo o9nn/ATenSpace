@@ -302,7 +302,7 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         return attention_values_.size();
     }
-    
+
 private:
     /**
      * Update the attentional focus based on current STI values

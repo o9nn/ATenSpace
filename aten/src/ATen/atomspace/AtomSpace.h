@@ -237,6 +237,9 @@ public:
         return size();
     }
 
+    /// Backward-compatible alias for size() used by NN consumers.
+    size_t getNumAtoms() const { return size(); }
+
     /**
      * Clear all atoms
      */

@@ -116,14 +116,16 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         
         size_t count = 0;
-        auto all_atoms = space_.getAtomsByType(Atom::Type::LINK);
-        
-        for (const auto& atom : all_atoms) {
-            if (isHebbianLinkType(atom->getType())) {
+        // Hebbian links have their own dedicated types (HEBBIAN_LINK,
+        // SYMMETRIC_HEBBIAN_LINK, ...), not the generic LINK type, so we must
+        // scan all atoms and filter by isHebbianLinkType rather than rely on
+        // getAtomsByType(Atom::Type::LINK).
+        for (const auto& atom : space_.getAtoms()) {
+            if (atom->isLink() && isHebbianLinkType(atom->getType())) {
                 count++;
             }
         }
-        
+
         return count;
     }
 
@@ -328,11 +330,13 @@ public:
     void forget() {
         std::lock_guard<std::mutex> lock(mutex_);
         
-        // Get all atoms being tracked
-        auto all_atoms = space_.getAtomsByType(Atom::Type::NODE);
-        auto all_links = space_.getAtomsByType(Atom::Type::LINK);
-        all_atoms.insert(all_atoms.end(), all_links.begin(), all_links.end());
-        
+        // Get all atoms being tracked.  Concrete atoms use specific types
+        // (CONCEPT_NODE, INHERITANCE_LINK, ...), not the abstract NODE/LINK
+        // enum values, so query the full atom set rather than
+        // getAtomsByType(NODE/LINK) which would miss them.
+        auto atom_set = space_.getAtoms();
+        std::vector<Handle> all_atoms(atom_set.begin(), atom_set.end());
+
         std::vector<Handle> to_remove;
         
         for (const auto& atom : all_atoms) {
@@ -392,13 +396,19 @@ private:
         if (av.sti > MIN_STI_FOR_PROTECTION) {
             return false;
         }
-        
-        // Check if in attentional focus
-        auto focus = attention_bank_.getAttentionalFocus();
-        if (std::find(focus.begin(), focus.end(), atom) != focus.end()) {
-            return false;
+
+        // Check if in attentional focus.  Only treat focus membership as
+        // protection when the atom is actively attended (above the STI
+        // protection floor); otherwise the default focus (threshold 0) would
+        // sweep in nearly every atom and nothing below the LTI threshold
+        // could ever be forgotten.
+        if (av.sti > MIN_STI_FOR_PROTECTION) {
+            auto focus = attention_bank_.getAttentionalFocus();
+            if (std::find(focus.begin(), focus.end(), atom) != focus.end()) {
+                return false;
+            }
         }
-        
+
         return true;
     }
     
@@ -627,12 +637,18 @@ private:
  *
  * CognitiveEngine holds its own AtomSpace and AttentionBank; this facade
  * satisfies the `ECAN(attentionBank)` / `runCycle()` / `setForgettingThreshold()`
- * surface it expects while delegating to ECANManager.
+ * surface it expects while delegating to ECANManager.  When constructed from
+ * an AttentionBank alone it owns an internal AtomSpace.
  */
 class ECAN {
 public:
     ECAN(AtomSpace& space, AttentionBank& bank)
-        : manager_(std::make_shared<ECANManager>(space, bank)) {}
+        : owned_space_(nullptr),
+          manager_(std::make_shared<ECANManager>(space, bank)) {}
+
+    explicit ECAN(AttentionBank& bank)
+        : owned_space_(std::make_shared<AtomSpace>()),
+          manager_(std::make_shared<ECANManager>(*owned_space_, bank)) {}
 
     void runCycle() { manager_->runCycle(); }
     void setForgettingThreshold(float threshold) {
@@ -646,6 +662,7 @@ public:
     std::shared_ptr<ECANManager> getManager() const { return manager_; }
 
 private:
+    std::shared_ptr<AtomSpace> owned_space_; // non-null when self-owned
     std::shared_ptr<ECANManager> manager_;
 };
 

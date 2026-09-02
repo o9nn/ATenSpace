@@ -9,6 +9,11 @@
 namespace at {
 namespace atomspace {
 
+// Re-export at::Tensor into at::atomspace so that code doing
+// `using namespace at::atomspace;` can refer to `Tensor` unqualified at
+// file/function scope (a very common pattern in the examples and tests).
+using at::Tensor;
+
 // Forward declarations
 class AtomSpace;
 
@@ -40,6 +45,7 @@ public:
         AND_LINK,
         OR_LINK,
         NOT_LINK,
+        ABSENT_LINK,   // Negation-as-failure: succeeds iff inner pattern has no match in the space
         // Set membership links
         MEMBER_LINK,
         SUBSET_LINK,
@@ -59,9 +65,7 @@ public:
         INVERSE_HEBBIAN_LINK,
         // Phase 10: extended pattern-matching atoms
         TYPED_VARIABLE_NODE,  ///< Variable constrained to a specific atom type
-        GLOB_NODE,            ///< Wildcard that matches zero or more atoms in a sequence
-        // Iteration 1: negation-as-failure query atom
-        ABSENT_LINK           ///< Succeeds iff its enclosed pattern yields zero matches
+        GLOB_NODE             ///< Wildcard that matches zero or more atoms in a sequence
     };
     
     virtual ~Atom() = default;
@@ -100,6 +104,19 @@ public:
     virtual void setEmbedding(const Tensor& /*embedding*/) {}
     virtual Tensor getEmbedding() const { return Tensor(); }
     virtual bool hasEmbedding() const { return false; }
+
+    /**
+     * Live incoming atoms (weak references resolved).  Links/nodes that
+     * reference this atom.  Expired weak references are dropped.
+     */
+    std::vector<Handle> getIncoming() const {
+        std::vector<Handle> live;
+        live.reserve(incoming_set_.size());
+        for (const auto& w : incoming_set_) {
+            if (auto h = w.lock()) live.push_back(h);
+        }
+        return live;
+    }
 
     // Truth value (stored as tensor for flexible representation)
     void setTruthValue(const Tensor& tv) { truth_value_ = tv; }
@@ -169,7 +186,7 @@ public:
     
     bool isNode() const override { return true; }
     bool isLink() const override { return false; }
-    
+
     std::string getName() const override { return name_; }
 
     // Tensor embedding for the node
@@ -192,6 +209,11 @@ private:
     std::string name_;
     Tensor embedding_;
 };
+
+// Convenience shared-pointer aliases used throughout the bindings and
+// consumer code.
+using AtomPtr = std::shared_ptr<Atom>;
+using NodePtr = std::shared_ptr<Node>;
 
 /**
  * Link - Represents a relationship between atoms
@@ -222,6 +244,7 @@ public:
             case Type::AND_LINK: return "AndLink";
             case Type::OR_LINK: return "OrLink";
             case Type::NOT_LINK: return "NotLink";
+            case Type::ABSENT_LINK: return "AbsentLink";
             case Type::MEMBER_LINK: return "MemberLink";
             case Type::SUBSET_LINK: return "SubsetLink";
             case Type::CONTEXT_LINK: return "ContextLink";
@@ -229,7 +252,6 @@ public:
             case Type::SIMULTANEOUS_LINK: return "SimultaneousLink";
             case Type::SIMILARITY_LINK: return "SimilarityLink";
             case Type::EXECUTION_LINK: return "ExecutionLink";
-            case Type::ABSENT_LINK: return "AbsentLink";
             default: return "Link";
         }
     }
@@ -282,6 +304,8 @@ private:
     Type type_;
     OutgoingSet outgoing_;
 };
+
+using LinkPtr = std::shared_ptr<Link>;
 
 } // namespace atomspace
 } // namespace at

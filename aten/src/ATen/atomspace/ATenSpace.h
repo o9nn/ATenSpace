@@ -170,6 +170,14 @@ inline Atom::Handle createNotLink(
     return space.addLink(Atom::Type::NOT_LINK, {atom});
 }
 
+// Create an AbsentLink (negation-as-failure): the wrapped pattern is asserted
+// to have no match anywhere in the AtomSpace at query time.
+inline Atom::Handle createAbsentLink(
+    AtomSpace& space,
+    Atom::Handle atom) {
+    return space.addLink(Atom::Type::ABSENT_LINK, {atom});
+}
+
 // Create a member link: element is member of set
 inline Atom::Handle createMemberLink(
     AtomSpace& space,
