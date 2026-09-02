@@ -51,7 +51,9 @@ jobs:
       - name: Install PyTorch (CPU)
         run: |
           pip install --upgrade pip
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # torch 2.14+ requires C++20; this project targets C++17 and uses
+          # 'concept' as an identifier, so pin to the last C++17-compatible release.
+          pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
 
       - name: Resolve Torch CMake prefix path
         id: torch-path
@@ -129,7 +131,9 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # torch 2.14+ requires C++20; this project targets C++17 and uses
+          # 'concept' as an identifier, so pin to the last C++17-compatible release.
+          pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
           pip install pybind11 numpy wheel setuptools
 
       - name: Build atenspace package (Python bindings)
