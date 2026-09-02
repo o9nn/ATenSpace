@@ -67,31 +67,21 @@ public:
      */
     std::vector<Handle> getHebbianLinks(Handle atom) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        
-        std::vector<Handle> links;
-        auto incoming = atom->getIncomingSet();
-        
-        for (const auto& weak_link : incoming) {
-            if (auto link = weak_link.lock()) {
-                auto type = link->getType();
-                if (isHebbianLinkType(type)) {
-                    links.push_back(link);
-                }
-            }
-        }
-        
-        return links;
+        return getHebbianLinksLocked(atom);
     }
-    
+
     /**
      * Get atoms connected by Hebbian links to the given atom
      */
     std::vector<std::pair<Handle, float>> getHebbianNeighbors(Handle atom) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        
+
         std::vector<std::pair<Handle, float>> neighbors;
-        auto links = getHebbianLinks(atom);
-        
+        // Use the lock-free internal helper: this method already holds
+        // mutex_, and calling the public getHebbianLinks() here would
+        // deadlock on the non-recursive mutex.
+        auto links = getHebbianLinksLocked(atom);
+
         for (const auto& link : links) {
             if (auto link_ptr = std::dynamic_pointer_cast<Link>(link)) {
                 auto outgoing = link_ptr->getOutgoingSet();
@@ -138,6 +128,26 @@ public:
     }
 
 private:
+    /**
+     * Lock-free internal implementation of getHebbianLinks.
+     * Caller must hold mutex_.
+     */
+    std::vector<Handle> getHebbianLinksLocked(Handle atom) const {
+        std::vector<Handle> links;
+        auto incoming = atom->getIncomingSet();
+
+        for (const auto& weak_link : incoming) {
+            if (auto link = weak_link.lock()) {
+                auto type = link->getType();
+                if (isHebbianLinkType(type)) {
+                    links.push_back(link);
+                }
+            }
+        }
+
+        return links;
+    }
+
     /**
      * Check if a type is a Hebbian link type
      */
@@ -578,6 +588,13 @@ public:
     WageAgent& getWageAgent() { return wage_agent_; }
     
     /**
+     * Set the LTI forgetting threshold (used by CognitiveEngine mode config)
+     */
+    void setForgettingThreshold(float threshold) {
+        forgetting_agent_.setLTIThreshold(threshold);
+    }
+
+    /**
      * Get statistics
      */
     size_t getCycleCount() const {
@@ -603,6 +620,33 @@ private:
     RentAgent rent_agent_;
     WageAgent wage_agent_;
     size_t cycle_count_;
+};
+
+/**
+ * ECAN - Facade over ECANManager for the CognitiveEngine (Iteration 1).
+ *
+ * CognitiveEngine holds its own AtomSpace and AttentionBank; this facade
+ * satisfies the `ECAN(attentionBank)` / `runCycle()` / `setForgettingThreshold()`
+ * surface it expects while delegating to ECANManager.
+ */
+class ECAN {
+public:
+    ECAN(AtomSpace& space, AttentionBank& bank)
+        : manager_(std::make_shared<ECANManager>(space, bank)) {}
+
+    void runCycle() { manager_->runCycle(); }
+    void setForgettingThreshold(float threshold) {
+        manager_->setForgettingThreshold(threshold);
+    }
+    void payWage(Atom::Handle atom) { manager_->payWage(atom); }
+    void payWages(const std::vector<Atom::Handle>& atoms) {
+        manager_->payWages(atoms);
+    }
+    size_t getCycleCount() const { return manager_->getCycleCount(); }
+    std::shared_ptr<ECANManager> getManager() const { return manager_; }
+
+private:
+    std::shared_ptr<ECANManager> manager_;
 };
 
 } // namespace atomspace

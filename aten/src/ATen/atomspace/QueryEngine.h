@@ -48,6 +48,18 @@ struct QueryClause {
 };
 
 /**
+ * Return true if the given pattern is an ABSENT_LINK negation-as-failure
+ * clause (Iteration 1, FR-1.2).
+ *
+ * An ABSENT_LINK wraps exactly one inner pattern.  It is satisfied iff
+ * the inner pattern yields ZERO matches against the AtomSpace.
+ */
+inline bool isAbsentLink(const Atom::Handle& pattern) {
+    return pattern && pattern->isLink() &&
+           pattern->getType() == Atom::Type::ABSENT_LINK;
+}
+
+/**
  * QueryBuilder - Fluent API for constructing hypergraph queries
  *
  * Example:
@@ -70,6 +82,9 @@ public:
 
     explicit QueryEngine(AtomSpace& space) : space_(space) {}
 
+    /** Accessor for the underlying AtomSpace (used by QueryBuilder). */
+    AtomSpace& getSpace() const { return space_; }
+
     // ------------------------------------------------------------------ //
     //  Core single-pattern query
     // ------------------------------------------------------------------ //
@@ -82,6 +97,20 @@ public:
      * @return         All solutions (variable → atom bindings)
      */
     QueryResultSet findMatches(const Atom::Handle& pattern) const {
+        // Negation-as-failure (FR-1.2): an ABSENT_LINK clause succeeds iff
+        // its enclosed pattern yields zero matches.  On success it produces
+        // a single (empty-binding) result; on failure it produces none.
+        // The space is not modified.
+        if (isAbsentLink(pattern)) {
+            QueryResultSet results;
+            const Link* link = static_cast<const Link*>(pattern.get());
+            if (link->getArity() == 1 &&
+                !exists(link->getOutgoingAtom(0))) {
+                results.emplace_back();  // one empty binding = "absent holds"
+            }
+            return results;
+        }
+
         QueryResultSet results;
         auto candidates = getCandidatesByType(pattern);
 
@@ -272,6 +301,12 @@ public:
      * Check whether any atom in the space satisfies the given pattern.
      */
     bool exists(const Atom::Handle& pattern) const {
+        // ABSENT_LINK is "present" iff its inner pattern is absent.
+        if (isAbsentLink(pattern)) {
+            const Link* link = static_cast<const Link*>(pattern.get());
+            return link->getArity() == 1 &&
+                   !exists(link->getOutgoingAtom(0));
+        }
         auto candidates = getCandidatesByType(pattern);
         for (const auto& candidate : candidates) {
             VariableBinding bindings;
@@ -280,6 +315,34 @@ public:
             }
         }
         return false;
+    }
+
+    /**
+     * Negation-as-failure query (Iteration 1, FR-1.2).
+     *
+     * Succeeds iff the enclosed pattern yields ZERO matches in the space.
+     * Returns a truth value with full strength/confidence when the pattern
+     * is absent, and zero strength when it is present.  The ABSENT_LINK
+     * atom itself, when present in the space, has its truth value updated
+     * to reflect the result (the only sanctioned tv interaction); no atoms
+     * are added or removed.
+     *
+     * @param absentLink  An ABSENT_LINK wrapping the inner pattern
+     * @return            Truth value: (1,1) if absent, (0,1) if present
+     */
+    Tensor evaluateAbsent(const Atom::Handle& absentLink) const {
+        bool absent = false;
+        if (isAbsentLink(absentLink)) {
+            const Link* link = static_cast<const Link*>(absentLink.get());
+            if (link->getArity() == 1) {
+                absent = !exists(link->getOutgoingAtom(0));
+            }
+        }
+        Tensor tv = TruthValue::create(absent ? 1.0f : 0.0f, 1.0f);
+        // Record the outcome on the link's own truth value (read-only
+        // w.r.t. the space contents; only this atom's tv is annotated).
+        absentLink->setTruthValue(tv);
+        return tv;
     }
 
     // ------------------------------------------------------------------ //
@@ -525,9 +588,9 @@ public:
         return *this;
     }
 
-    /** Execute the query and return results */
+    /** Execute the query and return results (negation-as-failure applied) */
     QueryResultSet execute() const {
-        return engine_.executeConjunctive(clauses_, filters_, maxResults_);
+        return engine_.executeConjunctive(clauses_, buildFilters(), maxResults_);
     }
 
     /** Count matching results without returning full bindings */
@@ -580,12 +643,13 @@ private:
     std::vector<FilterPredicate> buildFilters() const {
         std::vector<FilterPredicate> combined = filters_;
         for (const auto& negPat : negations_) {
-            combined.push_back([this, negPat](const QueryResult& row) {
-                // Substitute bound variables into the negation pattern
-                // then check if any match exists – if yes, exclude the row
-                QueryResultSet negMatches = engine_.findMatches(negPat);
-                // Simple check: any result means a match exists → exclude
-                return negMatches.empty();
+            combined.push_back([this, negPat](const QueryResult& /*row*/) {
+                // Global negation-as-failure (FR-1.2): if the negation
+                // pattern matches at least one atom in the space, every
+                // row is excluded.  An ABSENT_LINK pattern is evaluated
+                // directly; any other pattern is wrapped in the equivalent
+                // "exists" check.  The space is not modified.
+                return !engine_.exists(negPat);
             });
         }
         return combined;

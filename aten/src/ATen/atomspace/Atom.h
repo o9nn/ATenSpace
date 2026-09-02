@@ -59,7 +59,9 @@ public:
         INVERSE_HEBBIAN_LINK,
         // Phase 10: extended pattern-matching atoms
         TYPED_VARIABLE_NODE,  ///< Variable constrained to a specific atom type
-        GLOB_NODE             ///< Wildcard that matches zero or more atoms in a sequence
+        GLOB_NODE,            ///< Wildcard that matches zero or more atoms in a sequence
+        // Iteration 1: negation-as-failure query atom
+        ABSENT_LINK           ///< Succeeds iff its enclosed pattern yields zero matches
     };
     
     virtual ~Atom() = default;
@@ -72,7 +74,33 @@ public:
     
     // Identity
     size_t getHash() const { return hash_; }
-    
+
+    // ------------------------------------------------------------------
+    // Unified accessor surface (Iteration 1, FR-1.3)
+    //
+    // These provide safe defaults on the Atom base so that generic code
+    // (NLU, Vision, ATenNN, TensorLogicEngine, Python bindings) can call
+    // them without first downcasting to Node/Link.  Node and Link
+    // override the relevant subset.
+    // ------------------------------------------------------------------
+
+    /** Name of the atom (nodes only; links return an empty string). */
+    virtual std::string getName() const { return ""; }
+
+    /** Outgoing set (links only; nodes get an empty set). */
+    virtual const std::vector<Handle>& getOutgoing() const {
+        static const std::vector<Handle> kEmpty;
+        return kEmpty;
+    }
+
+    /** Arity of the outgoing set (0 for nodes). */
+    virtual size_t getArity() const { return 0; }
+
+    /** Tensor embedding accessors (nodes only; default no-op/undefined). */
+    virtual void setEmbedding(const Tensor& /*embedding*/) {}
+    virtual Tensor getEmbedding() const { return Tensor(); }
+    virtual bool hasEmbedding() const { return false; }
+
     // Truth value (stored as tensor for flexible representation)
     void setTruthValue(const Tensor& tv) { truth_value_ = tv; }
     Tensor getTruthValue() const { return truth_value_; }
@@ -142,12 +170,12 @@ public:
     bool isNode() const override { return true; }
     bool isLink() const override { return false; }
     
-    std::string getName() const { return name_; }
-    
+    std::string getName() const override { return name_; }
+
     // Tensor embedding for the node
-    void setEmbedding(const Tensor& embedding) { embedding_ = embedding; }
-    Tensor getEmbedding() const { return embedding_; }
-    bool hasEmbedding() const { return embedding_.defined(); }
+    void setEmbedding(const Tensor& embedding) override { embedding_ = embedding; }
+    Tensor getEmbedding() const override { return embedding_; }
+    bool hasEmbedding() const override { return embedding_.defined(); }
     
     std::string toString() const override {
         return "(" + getTypeName() + " \"" + name_ + "\")";
@@ -201,15 +229,17 @@ public:
             case Type::SIMULTANEOUS_LINK: return "SimultaneousLink";
             case Type::SIMILARITY_LINK: return "SimilarityLink";
             case Type::EXECUTION_LINK: return "ExecutionLink";
+            case Type::ABSENT_LINK: return "AbsentLink";
             default: return "Link";
         }
     }
     
     bool isNode() const override { return false; }
     bool isLink() const override { return true; }
-    
+
     const OutgoingSet& getOutgoingSet() const { return outgoing_; }
-    size_t getArity() const { return outgoing_.size(); }
+    const OutgoingSet& getOutgoing() const override { return outgoing_; }
+    size_t getArity() const override { return outgoing_.size(); }
     
     Handle getOutgoingAtom(size_t index) const {
         if (index < outgoing_.size()) {
